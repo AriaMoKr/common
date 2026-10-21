@@ -1,0 +1,18 @@
+{
+  // A site in TypeScript using the package by its name, compiled as breadboard compiles its own
+  // (its tsconfig.json): checks the .d.ts files give it real types. test/types.test.js runs it.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "types": [],
+    "noEmit": true
+  },
+  "files": ["site.ts"]
+}

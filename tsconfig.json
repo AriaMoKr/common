@@ -1,0 +1,18 @@
+{
+  // `npm run types`: a .d.ts beside each module in src/, from its JSDoc, for sites written in
+  // TypeScript (breadboard). The .d.ts files are committed; test/types.test.js checks they are current.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "strict": true,
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "newLine": "lf"
+  },
+  "include": ["src/*.js"]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "common",
+  "version": "0.1.0",
+  "description": "Code shared by the sites behind the Hallway's doors: the Hallway's door contract (a door's link, the way back, the view from the door) and the VR movement choice they share.",
+  "keywords": ["webxr", "threejs", "hallway", "portal", "deep-link"],
+  "homepage": "https://github.com/AriaMoKr/common#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AriaMoKr/common.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AriaMoKr/common/issues"
+  },
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    "./door.js": "./src/door.js",
+    "./nav.js": "./src/nav.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/"
+  ],
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "types": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
