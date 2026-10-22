@@ -22,19 +22,23 @@ describe('the package', () => {
     for (const m of modules) assert.ok(existsSync(new URL(`../src/${m.replace(/\.js$/, '.d.ts')}`, import.meta.url)), m);
   });
 
-  it('runs nothing on install and needs nothing at run time', () => {
+  it('runs nothing on install, and needs only the site\'s three at run time', () => {
     assert.equal(pkg.dependencies, undefined);
     for (const s of ['preinstall', 'install', 'postinstall', 'prepare', 'prepack']) assert.equal(pkg.scripts[s], undefined, s);
-    assert.deepEqual(Object.keys(pkg.devDependencies), ['typescript']);
+    assert.deepEqual(pkg.peerDependencies, { three: '>=0.154.0' });
+    assert.deepEqual(Object.keys(pkg.devDependencies), ['@types/three', 'three', 'typescript']);
   });
 
-  it('imports nothing, so a vendored copy works wherever it is put', () => {
+  it('imports only three, by its bare name, so a vendored copy works wherever it is put', () => {
+    const THREE_USERS = ['fade.js', 'portal.js'];
     for (const m of modules) {
       const src = readFileSync(new URL(`../src/${m}`, import.meta.url), 'utf8');
-      assert.doesNotMatch(src, /^\s*import\b/m, m);
+      const imports = [...src.matchAll(/^\s*import\s[^;'"]*['"]([^'"]+)['"]/gm)].map((x) => x[1]);
+      assert.deepEqual(imports, THREE_USERS.includes(m) ? ['three'] : [], m);
       assert.doesNotMatch(src, /^\s*export\s[^;'"]*\bfrom\s*['"]/m, m);
       assert.doesNotMatch(src, /\bimport\s*\(/, m);
     }
+    assert.deepEqual(modules.filter((m) => THREE_USERS.includes(m)), THREE_USERS, 'the modules named are there');
   });
 
   it('is MIT licensed, for Node 22 or later', () => {

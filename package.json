@@ -1,8 +1,8 @@
 {
   "name": "common",
-  "version": "0.1.0",
-  "description": "Code shared by the sites behind the Hallway's doors: the Hallway's door contract (a door's link, the way back, the view from the door) and the VR movement choice they share.",
-  "keywords": ["webxr", "threejs", "hallway", "portal", "deep-link"],
+  "version": "0.2.0",
+  "description": "Code shared by the sites behind the Hallway's doors: the Hallway's door contract (a door's link, the way back, the view from the door), the VR movement choice they share, and their three.js doorway, fade and gamepad.",
+  "keywords": ["webxr", "threejs", "hallway", "portal", "deep-link", "gamepad"],
   "homepage": "https://github.com/AriaMoKr/common#readme",
   "repository": {
     "type": "git",
@@ -19,7 +19,10 @@
   },
   "exports": {
     "./door.js": "./src/door.js",
+    "./fade.js": "./src/fade.js",
+    "./gamepad.js": "./src/gamepad.js",
     "./nav.js": "./src/nav.js",
+    "./portal.js": "./src/portal.js",
     "./package.json": "./package.json"
   },
   "files": [
@@ -29,7 +32,12 @@
     "test": "node --test \"test/*.test.js\"",
     "types": "tsc -p tsconfig.json"
   },
+  "peerDependencies": {
+    "three": ">=0.154.0"
+  },
   "devDependencies": {
+    "@types/three": "0.186.0",
+    "three": "0.186.1",
     "typescript": "5.9.3"
   }
 }

@@ -12,6 +12,7 @@
     "moduleResolution": "NodeNext",
     "lib": ["ES2022", "DOM"],
     "types": [],
+    "skipLibCheck": true,
     "newLine": "lf"
   },
   "include": ["src/*.js"]

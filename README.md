@@ -5,17 +5,21 @@ corridor whose doors lead to other environments: [hallway](https://github.com/Ar
 itself, [vrlbry](https://github.com/AriaMoKr/vrlbry), [music](https://github.com/AriaMoKr/music),
 [breadboard](https://github.com/AriaMoKr/breadboard) and [outside](https://github.com/AriaMoKr/outside).
 
-So far it holds the Hallway's door contract, which is how a door's link brings a visitor into an
-environment and how the environment leads them back:
+It holds the Hallway's door contract, which is how a door's link brings a visitor into an
+environment and how the environment leads them back, and the three.js pieces the sites share:
 
 - **[`door.js`](src/door.js)**: reading a visit and the way back, and the link a door opens.
 - **[`nav.js`](src/nav.js)**: the VR movement choice that the sites share in `localStorage`.
+- **[`portal.js`](src/portal.js)**: a room seen through an opening, drawn from one picture.
+- **[`fade.js`](src/fade.js)**: the fade to and from black around the viewer's head.
+- **[`gamepad.js`](src/gamepad.js)**: standard-layout gamepads on a desktop or a phone.
 
-These are plain ES modules with JSDoc, with no build step and no dependencies. They run in the
-browser and in Node, for the sites' tests. A `.d.ts` beside each module gives TypeScript sites
-their types. Each site still has its
-own copy of this code (see [Coming from a site's own copy](#coming-from-a-sites-own-copy)) and
-switches over in a change of its own.
+These are plain ES modules with JSDoc, with no build step. They run in the browser and in Node,
+for the sites' tests. `portal.js` and `fade.js` import three by its bare name, from the site
+(a peer dependency, r154 or later); the others import nothing. A `.d.ts` beside each module gives
+TypeScript sites their types. Every site takes `door.js` and `nav.js` from here since v0.1.0. The
+three.js pieces each site still copies (see
+[Coming from a site's own copy](#coming-from-a-sites-own-copy)) switch over in changes of their own.
 
 ## Going in
 
@@ -228,20 +232,127 @@ saveNav({ ...nav, move: 'teleport' });          // false when storage is blocked
 | `loadNav(storage?, defaults?)` | The stored choice, else the defaults. `storage` is `localStorage` when left out, and null where there is none. A site can pass its own defaults for a visitor who has stored no choice yet (vrlbry's older setting decides how to move). |
 | `saveNav(nav, storage?)` | Keeps the choice, complete and valid; false when it could not. |
 
+### `portal.js`
+
+A doorway's material: a flat quad in the opening that shows a room behind it, made from one
+picture. The picture is the room's far wall, and its edges are stretched back to the opening as
+the floor, ceiling and side walls ("interior mapping"). Each eye sees it from its own position, so
+it has parallax and, in a headset, depth. In front of it drift a veil and a glow along the frame,
+in the door's colour, brighter when pointed at. Without a colour there is no veil, for a plain
+window (the Hallway's end window).
+
+```js
+import * as THREE from 'three';
+import { openingGeometry, placePortal, portalMaterial, setView } from 'common/portal.js';
+
+// Before the Hallway's view of the door has loaded: a picture of one's own, hung by hand.
+const material = portalMaterial({ map: painted, width: 1.1, height: 2.25, depth: 2.4, pictureHeight: 3, eye: 1.6, horizon: 0.56, color: '#9fd07a' });
+const portal = new THREE.Mesh(openingGeometry(1.1, 2.25), material);
+doorway.add(portal);
+placePortal(portal);                            // once placed, and again whenever it moves
+
+setView(material, texture, view);               // view: viewParams(...) from door.js
+
+// Each frame:
+material.uniforms.uTime.value = time;
+material.uniforms.uGlow.value = pointedAt ? 1 : 0;
+```
+
+| Export | |
+|---|---|
+| `portalMaterial({ map, width, height, depth, pictureHeight, eye, horizon, aspect = 2, color = null })` | The material for an opening `width` by `height` (m), showing the texture `map` hung as the other fields say, with a veil in `color` (none when null). The view fields are `viewParams`' from `door.js`, so a view can be spread straight in: `portalMaterial({ ...view, map, width, height, color })`; its `image` is ignored. |
+| `openingGeometry(width, height)` | The quad for an opening, its origin at the middle of the sill, facing +z. |
+| `placePortal(mesh)` | Call once the mesh is placed, and again whenever it moves: the shader works in the opening's own frame. |
+| `setPicture(material, map, aspect)` | A new picture, keeping its height and taking the new one's aspect (the Hallway's door previews, once loaded). |
+| `setView(material, map, view)` | A new picture in a new room: `view` is `{ depth, pictureHeight, eye, horizon, aspect }`, as from `viewParams`, `aspect` 2 when left out. |
+
+The types `PortalMaterial` (a `THREE.ShaderMaterial` with the uniforms below), `PortalUniforms` and
+`PortalView` are in `portal.d.ts`. The uniforms are part of the API:
+
+| Uniform | Value | |
+|---|---|---|
+| `uTime` | number | Seconds, for the veil's drift. The site sets it each frame. |
+| `uGlow` | number | 0 idle, 1 pointed at. The site sets it each frame. |
+| `uMap` | `THREE.Texture` | The picture hung now. A site may read it (vrlbry keeps its painted one). |
+| `uColor` | `THREE.Color` | The veil's and the glow's colour. |
+| `uVeil` | number | 1 with a veil, 0 for a plain window. |
+| `uBoxMin`, `uBoxMax` | `THREE.Vector3` | The room, in the opening's frame (origin at the middle of its sill, facing +z): the picture hangs at `z = uBoxMin.z`, from `y = eye - horizon * pictureHeight`, `pictureHeight * aspect` wide. |
+| `uOpening` | `THREE.Vector2` | The opening's width and height. |
+| `uInverseModel` | `THREE.Matrix4` | The mesh's world matrix, inverted (`placePortal`). |
+
+The shader includes three's `tonemapping_fragment` and `colorspace_fragment`, the latter from three
+r154 on.
+
+### `fade.js`
+
+A fade to and from black around the viewer's head: a small sphere on the camera, drawn over
+everything, the same on a screen and in a headset. The sites fade out before going through a
+door, fade in on arriving, and blink a teleport with it.
+
+```js
+import { Fade } from 'common/fade.js';
+
+const fade = new Fade(camera);                  // black at first; new Fade(camera, 0) starts clear
+fade.to(0, 0.8);                                // fade in on arriving
+fade.to(1, 0.4, () => location.assign(url));    // fade out, then go
+fade.update(dt);                                // each frame
+```
+
+| Member | |
+|---|---|
+| `new Fade(camera, value = 1)` | Puts the sphere on `camera` (any `THREE.Object3D`), at `value`: 1 black, 0 clear. |
+| `to(target, seconds, done = null)` | Fades to `target` over `seconds`, then calls `done` once. A new `to` or `set` drops the fade under way, and its `done`. |
+| `set(value)` | Puts it at `value` at once. |
+| `update(dt)` | Moves the fade on by `dt` seconds; each frame. |
+| `mesh`, `material` | The sphere (`name` `'fade'`, hidden while clear) and its material, for instance to hide it from a still render. |
+| `value`, `target` | How black it is now, and where it is fading to. |
+
+### `gamepad.js`
+
+Standard-layout gamepads (Xbox, PlayStation, most Bluetooth pads) through the Gamepad API, on a
+desktop or a phone; in VR the controllers come through the XR session instead. The sites handle
+them alike, so a pad feels the same on both sides of a door: one dead zone, one stick scaling, the
+same pad chosen.
+
+```js
+import { firstPad, readPad } from 'common/gamepad.js';
+
+const state = { moveX: 0, moveY: 0, lookX: 0, lookY: 0, run: false, use: false, back: false };
+// Each frame:
+const pad = firstPad(navigator.getGamepads());
+if (pad) readPad(pad, state);                   // allocates nothing
+```
+
+| Export | |
+|---|---|
+| `readPad(pad, out?)` | What the pad asks for now, written into `out`: `{ moveX, moveY, lookX, lookY, run, use, back }`. The left stick walks and, clicked in, hurries (`run`); the right one looks; A uses; B or Back goes back. Sticks are -1 to 1, y down as gamepads give it. |
+| `firstPad(pads)` | The first connected pad of `navigator.getGamepads()`, preferring one with the standard mapping, or null. |
+| `stick(x, y, deadzone = DEADZONE, out?)` | A stick with a radial dead zone, rescaled to start smoothly at its edge and reach 1 at full tilt, diagonally too: `{ x, y }`, written into `out` when given. |
+| `held(pad, i)` | Whether button `i` is held: pressed, or an analogue one more than half way. |
+| `DEADZONE` | 0.18. |
+| `BUTTON` | The buttons `readPad` reads, by index in the standard mapping: `{ a: 0, b: 1, back: 8, leftStick: 10 }`. |
+| `BUTTONS` | Every button's name by index in the standard mapping: `a`, `b`, `x`, `y`, `lb`, `rb`, `lt`, `rt`, `back`, `start`, `ls`, `rs`, `up`, `down`, `left`, `right`, `home`. |
+
+A site with a reader of its own (vrlbry's, which reports every button, the triggers and the
+presses since the last frame) builds it on `stick`, `held` and `BUTTONS`.
+
 ## Using it
 
 Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.1.0"
+  "common": "github:AriaMoKr/common#v0.2.0",
+  "three": "0.186.1"
 }
 ```
 
 The package holds `src/` (the modules and their `.d.ts` files), the license and this README. It
-has no dependencies and runs nothing on install. In Node the modules import as `common/door.js`
-and `common/nav.js`, for a site's tests. To take a new version, move the tag in package.json and
-run `npm install`.
+has no dependencies of its own and runs nothing on install. three is a peer dependency
+(`>=0.154.0`): `portal.js` and `fade.js` use the site's own, so a page has one three. In Node the
+modules import as `common/door.js` and so on, for a site's tests. To take a new version, move the
+tag in package.json and run `npm install`. v0.2.0 adds modules and leaves `door.js` and `nav.js`
+as they were in v0.1.0.
 
 The sites load it in the browser in three ways, as they load layersharedsession.
 
@@ -263,7 +374,8 @@ and the page's import map maps the name to the copy:
 }}
 ```
 
-Then a module imports `common/door.js`, in the browser and in Node alike.
+Then a module imports `common/door.js`, in the browser and in Node alike. The import map already
+maps `three`, which `portal.js` and `fade.js` import.
 
 ### `server/vendor.js` (vrlbry, music)
 
@@ -279,56 +391,53 @@ The client names its modules by relative URL, as it does layersharedsession's:
 import { wayBack } from '../vendor/common/door.js';
 ```
 
-The modules import nothing, so `BARE` needs no entries, and `tools/build-pages.mjs` copies them
-into the published site with the rest of what the client imports. Tests in Node import
-`common/door.js`.
+`door.js`, `nav.js` and `gamepad.js` import nothing. `portal.js` and `fade.js` import `three` by
+its bare name, which the page's import map maps, as it does for layersharedsession's `avatars.js`;
+so `BARE` needs no entries, and they are for the page, not a worker, which has no import map.
+`tools/build-pages.mjs` copies them into the published site with the rest of what the client
+imports. Tests in Node import `common/door.js` and so on.
 
 ### Vite (breadboard)
 
-Import it by name. Vite resolves it through the package's `exports` and bundles it:
+Import it by name. Vite resolves it through the package's `exports` and bundles it, with the
+site's own three for `portal.js` and `fade.js`:
 
 ```ts
 import { readVisit, wayBack, type WayBack } from 'common/door.js';
 import { loadNav, saveNav, type Nav } from 'common/nav.js';
+import { portalMaterial, setView, type PortalMaterial } from 'common/portal.js';
+import { Fade } from 'common/fade.js';
 ```
 
 TypeScript, with `moduleResolution: "bundler"`, reads the `.d.ts` beside each module, so no
 declarations of the site's own are needed (`test/types/` compiles a file the way breadboard's
-tsconfig does).
+tsconfig does). `portal.d.ts` and `fade.d.ts` refer to three's types, from the site's
+`@types/three`.
 
 ## Coming from a site's own copy
 
-What changes for each site when it switches over:
+Every site took `door.js` and `nav.js` from here at v0.1.0. What changes for each when it takes
+the three.js pieces of v0.2.0 in place of its own copies:
 
-- **Every environment** passes its door id where the copy had it built in: `wayBack(search, id, …)`
-  and `hallwayViews(way, id)`, and `hallwayUrl(id)` for the copy's `HALLWAY_URL` with `?from=`.
-  The way back to the Hallway has one title, "Back to the Hallway, whose doors lead to other
-  places". A `back` on the Hallway's origin but another path is no longer the Hallway: only the
-  Hallway's own page is (vrlbry's
-  [`ea430a8`](https://github.com/AriaMoKr/vrlbry/commit/ea430a8)). `withoutVisit` takes off
-  `backname` too.
-- **breadboard** (`src/vr/hallway.ts`): `wayBack(location.search, 'breadboard', { origin:
-  location.origin, always: false })`. The way back gains `host`. `doorOf`, `keptDoor`, `DOOR` and
-  `DEFAULT_GLOW` stay in breadboard; `keptDoor` can check its way with `keptWay`.
-  `layersharedsession.d.ts` stays until layersharedsession has types of its own.
-- **outside** (`public/js/way.js`): `wayBack(location.search, 'outside', { origin:
-  location.origin })`. `OUTSIDE_ID`, `DEFAULT_GLOW` and `HALLWAY_DOOR` stay in outside. Its nav
-  copy (`settings.js`) is the Hallway's, so `loadNav()` and `saveNav(nav)` read the same.
-- **vrlbry and music** (`public/js/hallway.js`): `wayOut(search)` is `wayBack(search, 'vrlbry')`
-  (or `'music'`), and the way's `custom` is `!hallway`. `doorOf` stays, with `views` and `viewId`
-  from `hallwayViews`. In `nav.js`, `loadNav(storage, settings)` is `loadNav(storage, { ...NAV_DEFAULTS,
-  move: settings.smoothMove === false ? 'teleport' : 'smooth' })`, and `saveNav(storage, nav)` is
-  `saveNav(nav, storage)`.
-- **hallway** (`public/js/link.js`, `settings.js`): `doorLink`, `HALLWAY_ID` and `LINK_PARAMS` come
-  from here; `doorPose` stays, since it measures the Hallway's own layout. `loadNav()` and
-  `saveNav(nav)` read and write `localStorage` as before. These README sections move here from
-  the Hallway's.
+- **hallway** (`public/js/portal.js`, `fade.js`, `gamepad.js`) and **outside** (the same three
+  files): import them from `common/`; the calls stay as they are. hallway's end window passes no
+  colour, as now, and outside's `setView` is the same.
+- **vrlbry and music** (`public/js/world/portal.js`): the portal from `common/portal.js`, with
+  `setPicture(material, map, view)` renamed to `setView(material, map, view)`. The door always
+  passes a colour, so its veil is drawn as before, and `uMap`, `uTime` and `uGlow` are where they
+  were. The gamepad (`public/js/xr/gamepad.js`) can stay as it is, its reader its own, or build on
+  `stick`, `held`, `BUTTONS`, `DEADZONE` and `firstPad` from `common/gamepad.js`, which are its own
+  pieces under the same names.
+- **breadboard** (`src/vr/portal.ts`, `fade.ts`): the portal from `common/portal.js`, passing an
+  object instead of arguments in order: `portalMaterial({ ...PICTURE, map: fallback, width,
+  height, color: glow })`, and `type PortalMaterial` from there too. `Fade` from `common/fade.js`,
+  still `new Fade(camera, 0)`.
 
 ## Developing
 
 ```bash
-npm install     # TypeScript, for the .d.ts files
-npm test        # node --test "test/*.test.js"
+npm install     # TypeScript, for the .d.ts files; three and @types/three, for the tests and the types
+npm test        # node --test "test/*.test.js": the portal and the fade are built in Node, no WebGL
 npm run types   # src/*.d.ts from the JSDoc
 ```
 
@@ -337,7 +446,8 @@ The `.d.ts` files are made from the JSDoc and committed. After changing a module
 
 The door contract is in links that are already out in the world, in the sites pinned to older
 versions of this package, and in bookmarks, so a change to it must keep reading the links the
-Hallway and the sites make today.
+Hallway and the sites make today. The portal's uniforms are API too: the sites set `uTime` and
+`uGlow` and read `uMap` by name.
 
 ## License
 
