@@ -30,7 +30,7 @@ describe('the package', () => {
   });
 
   it('imports only three, by its bare name, so a vendored copy works wherever it is put', () => {
-    const THREE_USERS = ['fade.js', 'portal.js', 'sky.js'];
+    const THREE_USERS = ['access.js', 'fade.js', 'portal.js', 'sky.js'];
     for (const m of modules) {
       const src = readFileSync(new URL(`../src/${m}`, import.meta.url), 'utf8');
       const imports = [...src.matchAll(/^\s*import\s[^;'"]*['"]([^'"]+)['"]/gm)].map((x) => x[1]);

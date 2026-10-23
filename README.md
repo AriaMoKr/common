@@ -14,13 +14,15 @@ environment and how the environment leads them back, and the three.js pieces the
 - **[`fade.js`](src/fade.js)**: the fade to and from black around the viewer's head.
 - **[`gamepad.js`](src/gamepad.js)**: standard-layout gamepads on a desktop or a phone.
 - **[`sky.js`](src/sky.js)**: outside's late afternoon, for every window behind every door.
+- **[`access.js`](src/access.js)**: accessibility settings every site shares: less motion, a comfort
+  vignette in VR, and a seated mode.
 
 These are plain ES modules with JSDoc, with no build step. They run in the browser and in Node,
-for the sites' tests. `portal.js`, `fade.js` and `sky.js` import three by its bare name, from the
-site (a peer dependency, r154 or later); the others import nothing. A `.d.ts` beside each module
-gives TypeScript sites their types. Every site takes what v0.1.0 and v0.2.0 brought from here. The
-sky each still paints its own way (see
-[Coming from a site's own copy](#coming-from-a-sites-own-copy)) switches over in changes of their own.
+for the sites' tests. `portal.js`, `fade.js`, `sky.js` and `access.js` import three by its bare
+name, from the site (a peer dependency, r154 or later); the others import nothing. A `.d.ts` beside
+each module gives TypeScript sites their types. Every site takes what v0.1.0 and v0.2.0 brought from
+here. The sky of v0.3.0 and the settings of v0.4.0 come to each site in changes of its own (see
+[Coming from a site's own copy](#coming-from-a-sites-own-copy)).
 
 ## Going in
 
@@ -391,23 +393,106 @@ where:
 
 Every window and skylight of one room shares one yaw: there is one sky.
 
+### `access.js`
+
+Accessibility settings, shared by every site on `ariamokr.github.io` as the movement choice is:
+kept in `localStorage` under `hallway.access`, so a visitor sets them once, anywhere, and they
+come with them through every door.
+
+| Setting | Values | What the visitor gets |
+|---|---|---|
+| `motion` | `'system'` (the default), `'reduce'`, `'full'` | Less motion: going to a clicked spot jumps there instead of gliding, the fades are blinks, and nothing moves on its own (the doorways' drifting veil, the water, waving visitors' bob). `'system'` follows the device's own setting (`prefers-reduced-motion`), and follows it if it changes. |
+| `vignette` | `true` (the default), `false` | In VR, while moving or turning smoothly with the sticks, the edge of the view darkens and closes in, and it opens again on stopping. It eases the motion sickness smooth movement gives some people. Snap turns and teleports need none: they blink already. |
+| `seated` | `false` (the default), `true` | In VR, the view is raised 0.45 m, so a visitor sitting down sees from about standing height: over the hallway's panel, the library's shelves, the breadboard's table. |
+
+```js
+import { Vignette, eyeLift, loadAccess, motionQuery, reduceMotion, saveAccess, watchMotion } from 'common/access.js';
+
+let access = loadAccess();                      // { motion, vignette, seated }
+const query = motionQuery();                    // the system's setting; get it once
+let reduce = reduceMotion(access, query);
+watchMotion(() => { reduce = reduceMotion(access, query); }, query);
+
+const vignette = new Vignette(camera, access.vignette);
+
+// A setting changed, on the panel or in the overlay:
+function setAccess(change) {
+  access = { ...access, ...change };
+  saveAccess(access);                           // false when storage is blocked: it lasts this visit
+  reduce = reduceMotion(access, query);
+  vignette.enabled = access.vignette;
+  placeRig();                                   // seated may have changed
+}
+
+// Each frame, from the sticks' smooth movement (m/s) and smooth turning (rad/s):
+vignette.update(dt, moveSpeed, turnRate, renderer.xr.isPresenting);
+
+// The rig's height, on entering and leaving VR and when seated changes:
+function placeRig() {
+  rig.position.y = floor + (renderer.xr.isPresenting ? eyeLift(access) : 0);
+}
+```
+
+| Export | |
+|---|---|
+| `ACCESS_KEY` | `'hallway.access'`. |
+| `ACCESS_DEFAULTS` | `{ motion: 'system', vignette: true, seated: false }`, frozen. |
+| `normalizeAccess(value, defaults?)` | Complete, valid settings from whatever was stored: anything unknown or missing is the default, value by value. |
+| `loadAccess(storage?, defaults?)` | The stored settings, else the defaults. `storage` is `localStorage` when left out, and null where there is none. |
+| `saveAccess(access, storage?)` | Keeps them, complete and valid; false when it could not. |
+| `REDUCED_MOTION` | `'(prefers-reduced-motion: reduce)'`. |
+| `motionQuery()` | `matchMedia(REDUCED_MOTION)`, or null where there is none (Node). Each call makes a new one: get it once. |
+| `reduceMotion(access, query?)` | Whether to reduce motion: true for `'reduce'`, false for `'full'`, and the system's setting for `'system'`. |
+| `watchMotion(onChange, query?)` | Calls `onChange(reduce)` when the system's setting changes; returns a function that stops it. |
+| `new Vignette(camera, enabled = true)` | The comfort vignette, on `camera`. `update(dt, speed, turnRate, xr)` each frame closes it toward the larger of `speed / 1.8` and `turnRate / 1.6` (the sites' walking and turning at full stick), in 0.15 s, and opens it in 0.4 s; it allocates nothing. Outside VR, or with `enabled` false, it is open. `set(strength)` sets it at once, `strength` is how closed it is (0 to 1), and `mesh` and `material` are the ring. |
+| `VIGNETTE` | Its tuning: `fullSpeed`, `fullTurn`, `open` (60°, the clear view's half-angle as it starts to close), `closed` (30°), `feather` (15°, the soft edge), `rise` and `fall` (per second). |
+| `eyeLift(access)` | The metres to raise the rig in VR: `SEATED_LIFT` (0.45) when seated, else 0. |
+
+The types `Access`, `VignetteMaterial` and `VignetteUniforms` are in `access.d.ts`.
+
+**Wiring it in.** What a site does with each setting:
+
+- **Less motion** (`reduce` true):
+  - *Jump, don't glide*: a click or tap on the floor (`walkTo`) puts the visitor there at once, and
+    a view that eases to a book or a bookcase cuts to it.
+  - *Blink, don't fade slowly*: fades of a few tenths of a second become a blink (`fade.to(1, 0.08)`
+    and back, as a teleport does), or `fade.set`.
+  - *Stop what moves on its own*: hold the portals' `uTime` where it is, and outside's water and
+    grass; skip the wave's bob (the toast still says who waved). Turn it back on when `reduce`
+    goes false. Movement the visitor makes themselves, walking and turning, stays.
+- **The vignette**: one `Vignette` on the camera, beside the `Fade`, drawn under it. Each frame pass
+  the speed and turning the sticks ask for in VR, not the head's own motion (the headset moving is
+  the visitor moving, and needs none): 0 for a snap turn and a teleport. Hide its `mesh` from still
+  renders, as the fade's is (the Hallway's door views). It is drawn at infinity in each eye, so the
+  ring never looks near.
+- **Seated**: add `eyeLift(access)` to the rig's height in VR only, on entering VR, on leaving it
+  (back to 0), and when the setting changes; a teleport keeps it. On a screen the site's own eye
+  height stays.
+- **Where to set them**: beside the movement choice, on the site's 3D control panel (rows such as
+  *Motion: System / Less / Full*, *Vignette: On / Off*, *Seated: On / Off*), and in a DOM control
+  in its overlay, so they can be reached with a keyboard and a screen reader: a labelled group of
+  three radio buttons for motion and two checkboxes, applied and saved as soon as they change.
+  Another site on the origin changing them shows up as a `storage` event for `ACCESS_KEY` in a page
+  still open; reading them on `pageshow` is enough for one that comes back from the back/forward
+  cache.
+
 ## Using it
 
 Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.3.0",
+  "common": "github:AriaMoKr/common#v0.4.0",
   "three": "0.186.1"
 }
 ```
 
 The package holds `src/` (the modules and their `.d.ts` files), the license and this README. It
 has no dependencies of its own and runs nothing on install. three is a peer dependency
-(`>=0.154.0`): `portal.js`, `fade.js` and `sky.js` use the site's own, so a page has one three. In
-Node the modules import as `common/door.js` and so on, for a site's tests. To take a new version,
-move the tag in package.json and run `npm install`. Each version so far only adds modules: v0.3.0
-leaves the modules of v0.1.0 and v0.2.0 as they were.
+(`>=0.154.0`): `portal.js`, `fade.js`, `sky.js` and `access.js` use the site's own, so a page has
+one three. In Node the modules import as `common/door.js` and so on, for a site's tests. To take a
+new version, move the tag in package.json and run `npm install`. Each version so far only adds
+modules: v0.4.0 leaves those of v0.1.0 to v0.3.0 as they were.
 
 The sites load it in the browser in three ways, as they load layersharedsession.
 
@@ -430,7 +515,7 @@ and the page's import map maps the name to the copy:
 ```
 
 Then a module imports `common/door.js`, in the browser and in Node alike. The import map already
-maps `three`, which `portal.js`, `fade.js` and `sky.js` import.
+maps `three`, which `portal.js`, `fade.js`, `sky.js` and `access.js` import.
 
 ### `server/vendor.js` (vrlbry, music)
 
@@ -446,8 +531,8 @@ The client names its modules by relative URL, as it does layersharedsession's:
 import { wayBack } from '../vendor/common/door.js';
 ```
 
-`door.js`, `nav.js` and `gamepad.js` import nothing. `portal.js`, `fade.js` and `sky.js` import
-`three` by its bare name, which the page's import map maps, as it does for layersharedsession's
+`door.js`, `nav.js` and `gamepad.js` import nothing. `portal.js`, `fade.js`, `sky.js` and
+`access.js` import `three` by its bare name, which the page's import map maps, as it does for layersharedsession's
 `avatars.js`;
 so `BARE` needs no entries, and they are for the page, not a worker, which has no import map.
 `tools/build-pages.mjs` copies them into the published site with the rest of what the client
@@ -456,7 +541,7 @@ imports. Tests in Node import `common/door.js` and so on.
 ### Vite (breadboard)
 
 Import it by name. Vite resolves it through the package's `exports` and bundles it, with the
-site's own three for `portal.js`, `fade.js` and `sky.js`:
+site's own three for `portal.js`, `fade.js`, `sky.js` and `access.js`:
 
 ```ts
 import { readVisit, wayBack, type WayBack } from 'common/door.js';
@@ -467,14 +552,15 @@ import { Fade } from 'common/fade.js';
 
 TypeScript, with `moduleResolution: "bundler"`, reads the `.d.ts` beside each module, so no
 declarations of the site's own are needed (`test/types/` compiles a file the way breadboard's
-tsconfig does). `portal.d.ts`, `fade.d.ts` and `sky.d.ts` refer to three's types, from the site's
+tsconfig does). `portal.d.ts`, `fade.d.ts`, `sky.d.ts` and `access.d.ts` refer to three's types, from the site's
 `@types/three`.
 
 ## Coming from a site's own copy
 
 Every site took `door.js` and `nav.js` at v0.1.0, and the portal, the fade and the gamepad at
-v0.2.0 (vrlbry and music keep their own gamepad reader, on `stick` and the rest). What changes for
-each when it takes the sky of v0.3.0 in place of its own:
+v0.2.0 (vrlbry and music keep their own gamepad reader, on `stick` and the rest).
+
+**The sky (v0.3.0).** What changes for each when it takes the sky in place of its own:
 
 - **outside** (`public/js/sky.js`, and `SUN_DIR` in `bake.js`): both move here. `scene.js` takes
   `skyTexture` and `skyDome`, `water.js` `SKY_UV` and `SUN_DIR`, and `bake.js` imports `SUN_DIR`
@@ -490,11 +576,34 @@ each when it takes the sky of v0.3.0 in place of its own:
   normalised for a picture. Each room picks its yaw (above).
 - **breadboard** has no sky to change.
 
+**Accessibility (v0.4.0).** No site has these settings yet, so each takes them in new (see
+[Wiring it in](#accessjs)):
+
+- **hallway**: its 3D control panel (`panel.js`) gains rows for motion, the vignette and seated,
+  under Move and Turn, and its overlay a DOM settings control. With less motion, clicking the floor
+  (`controls.js` `walkTo`) jumps there, the arrival's and the doors' fades blink, the doorways'
+  `uTime` is held (`hall.js`), and visitors don't bob when they wave. `main.js` puts a `Vignette`
+  beside its `Fade` and drives it from the controls' smooth walking and turning; the rig takes
+  `eyeLift` in VR. The door views and the link preview hide the vignette's mesh as they hide the
+  fade's.
+- **outside**: as the hallway: its panel (`panel.js`) and its overlay offer the settings; with less
+  motion `walkTo` (and the walk over the bridge, and to the bench) jumps, the fades blink, and the
+  water, the grass's sway and the doorway's `uTime` are held; a `Vignette` beside the `Fade`; the
+  rig takes `eyeLift` in VR.
+- **vrlbry and music**: the kiosk's settings (`interaction.js`, beside Snap turning) and the
+  overlay offer them. With less motion the view's eased moves (`_tween`) cut, the room-switch fade
+  blinks, the door's `uTime` is held, and visitors don't bob when they wave. `xr/controls.js`
+  drives a `Vignette` from its smooth move and turn; the rig takes `eyeLift` in VR.
+- **breadboard**: the VR view's panel (`src/vr/main.ts`, beside Move and Turn) and a DOM control on
+  `vr.html` offer them. With less motion its eased flight (`fly`) cuts, the fades blink and the
+  doorway's `uTime` is held. A `Vignette` beside the `Fade`, driven from `move.ts`'s walking and
+  turning; the rig takes `eyeLift` in VR.
+
 ## Developing
 
 ```bash
 npm install     # TypeScript, for the .d.ts files; three and @types/three, for the tests and the types
-npm test        # node --test "test/*.test.js": the portal, the fade and the sky are built in Node, no WebGL
+npm test        # node --test "test/*.test.js": the portal, the fade, the sky and the vignette are built in Node, no WebGL
 npm run types   # src/*.d.ts from the JSDoc
 ```
 
@@ -508,7 +617,9 @@ painter gives. A change to how the sky looks changes that fingerprint, on purpos
 The door contract is in links that are already out in the world, in the sites pinned to older
 versions of this package, and in bookmarks, so a change to it must keep reading the links the
 Hallway and the sites make today. The portal's uniforms are API too: the sites set `uTime` and
-`uGlow` and read `uMap` by name.
+`uGlow` and read `uMap` by name. So are the keys in `localStorage` (`hallway.nav`,
+`hallway.access`) and their values: every site on the origin reads them, at whatever version it
+pins.
 
 ## License
 

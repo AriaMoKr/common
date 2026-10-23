@@ -13,6 +13,8 @@ import { BUTTON, BUTTONS, DEADZONE, firstPad, held, readPad, stick } from 'commo
 import type { PadState } from 'common/gamepad.js';
 import { SKY_UV, SUN_DIR, skyColor, skyDome, skyMaterial, skyTexture } from 'common/sky.js';
 import type { SkyMaterial } from 'common/sky.js';
+import { ACCESS_DEFAULTS, ACCESS_KEY, Vignette, eyeLift, loadAccess, motionQuery, normalizeAccess, reduceMotion, saveAccess, watchMotion } from 'common/access.js';
+import type { Access, VignetteMaterial } from 'common/access.js';
 
 const visit: Visit = readVisit('?from=hallway&dx=0.12');
 const dx: number | null = visit.dx;
@@ -63,6 +65,24 @@ const [red]: [number, number, number] = skyColor(0, SUN_DIR[1]);
 const reflects: string = `${SKY_UV}`;
 skyTexture({ canvas: (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) });
 
+// The visitor's accessibility settings: less motion, the comfort vignette, seated.
+let access: Access = loadAccess();
+const query = motionQuery();
+let reduce: boolean = reduceMotion(access, query);
+const stopWatching: () => void = watchMotion(() => { reduce = reduceMotion(access, query); }, query);
+access = normalizeAccess({ ...access, motion: 'reduce' });
+const kept2: boolean = saveAccess({ seated: true });
+const vignette = new Vignette(new THREE.PerspectiveCamera(), access.vignette);
+vignette.update(1 / 72, 1.8, 0, true);
+const ring: VignetteMaterial = vignette.material;
+const lift: number = eyeLift(access);
+const accessKey: 'hallway.access' = ACCESS_KEY;
+
+// @ts-expect-error motion is one of three
+const sometimes: Access = { ...ACCESS_DEFAULTS, motion: 'sometimes' };
+// @ts-expect-error the vignette moves on with the speed, the turning and whether in VR
+vignette.update(1 / 72, 1.8);
+
 // @ts-expect-error the sun stays where it is
 SUN_DIR[0] = 0;
 // @ts-expect-error the panorama's turn is a number
@@ -89,4 +109,4 @@ NAV_DEFAULTS.move = 'teleport';
 // @ts-expect-error a view's sizes are numbers
 const depth: string = hung!.depth;
 
-export { dx, views, urls, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects };
+export { dx, views, urls, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects, reduce, stopWatching, kept2, ring, lift, accessKey, sometimes };
