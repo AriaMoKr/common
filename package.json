@@ -1,8 +1,8 @@
 {
   "name": "common",
-  "version": "0.2.0",
-  "description": "Code shared by the sites behind the Hallway's doors: the Hallway's door contract (a door's link, the way back, the view from the door), the VR movement choice they share, and their three.js doorway, fade and gamepad.",
-  "keywords": ["webxr", "threejs", "hallway", "portal", "deep-link", "gamepad"],
+  "version": "0.3.0",
+  "description": "Code shared by the sites behind the Hallway's doors: the Hallway's door contract (a door's link, the way back, the view from the door), the VR movement choice they share, and their three.js doorway, fade, gamepad and afternoon sky.",
+  "keywords": ["webxr", "threejs", "hallway", "portal", "deep-link", "gamepad", "sky"],
   "homepage": "https://github.com/AriaMoKr/common#readme",
   "repository": {
     "type": "git",
@@ -23,6 +23,7 @@
     "./gamepad.js": "./src/gamepad.js",
     "./nav.js": "./src/nav.js",
     "./portal.js": "./src/portal.js",
+    "./sky.js": "./src/sky.js",
     "./package.json": "./package.json"
   },
   "files": [

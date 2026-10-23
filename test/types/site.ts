@@ -11,6 +11,8 @@ import type { PortalMaterial, PortalView } from 'common/portal.js';
 import { Fade } from 'common/fade.js';
 import { BUTTON, BUTTONS, DEADZONE, firstPad, held, readPad, stick } from 'common/gamepad.js';
 import type { PadState } from 'common/gamepad.js';
+import { SKY_UV, SUN_DIR, skyColor, skyDome, skyMaterial, skyTexture } from 'common/sky.js';
+import type { SkyMaterial } from 'common/sky.js';
 
 const visit: Visit = readVisit('?from=hallway&dx=0.12');
 const dx: number | null = visit.dx;
@@ -51,6 +53,20 @@ const moved: { x: number; y: number } = stick(pad?.axes[0], pad?.axes[1], DEADZO
 const using: boolean = pad ? held(pad, BUTTON.a) : false;
 const first: 'a' = BUTTONS[0];
 
+// The afternoon sky: a dome, and the room's merged window glass looking out at it, turned.
+const sky: THREE.CanvasTexture = skyTexture();
+const dome: THREE.Mesh = skyDome(sky);
+const glass: SkyMaterial = skyMaterial(sky, { yaw: Math.PI / 2 });
+glass.uniforms.uYaw.value = 0;
+const sunUp: number = SUN_DIR[1];
+const [red]: [number, number, number] = skyColor(0, SUN_DIR[1]);
+const reflects: string = `${SKY_UV}`;
+skyTexture({ canvas: (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) });
+
+// @ts-expect-error the sun stays where it is
+SUN_DIR[0] = 0;
+// @ts-expect-error the panorama's turn is a number
+skyMaterial(sky, { yaw: 'west' });
 // @ts-expect-error uTime is a number
 material.uniforms.uTime.value = 'now';
 // @ts-expect-error setPicture needs the new picture's aspect
@@ -73,4 +89,4 @@ NAV_DEFAULTS.move = 'teleport';
 // @ts-expect-error a view's sizes are numbers
 const depth: string = hung!.depth;
 
-export { dx, views, urls, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first };
+export { dx, views, urls, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects };

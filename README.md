@@ -13,13 +13,14 @@ environment and how the environment leads them back, and the three.js pieces the
 - **[`portal.js`](src/portal.js)**: a room seen through an opening, drawn from one picture.
 - **[`fade.js`](src/fade.js)**: the fade to and from black around the viewer's head.
 - **[`gamepad.js`](src/gamepad.js)**: standard-layout gamepads on a desktop or a phone.
+- **[`sky.js`](src/sky.js)**: outside's late afternoon, for every window behind every door.
 
 These are plain ES modules with JSDoc, with no build step. They run in the browser and in Node,
-for the sites' tests. `portal.js` and `fade.js` import three by its bare name, from the site
-(a peer dependency, r154 or later); the others import nothing. A `.d.ts` beside each module gives
-TypeScript sites their types. Every site takes `door.js` and `nav.js` from here since v0.1.0. The
-three.js pieces each site still copies (see
-[Coming from a site's own copy](#coming-from-a-sites-own-copy)) switch over in changes of their own.
+for the sites' tests. `portal.js`, `fade.js` and `sky.js` import three by its bare name, from the
+site (a peer dependency, r154 or later); the others import nothing. A `.d.ts` beside each module
+gives TypeScript sites their types. Every site takes what v0.1.0 and v0.2.0 brought from here. The
+sky each still paints its own way (see
+[Coming from a site's own copy](#coming-from-a-sites-own-copy)) switches over in changes of their own.
 
 ## Going in
 
@@ -336,23 +337,77 @@ if (pad) readPad(pad, state);                   // allocates nothing
 A site with a reader of its own (vrlbry's, which reports every button, the triggers and the
 presses since the last frame) builds it on `stick`, `held` and `BUTTONS`.
 
+### `sky.js`
+
+The sky of a late afternoon, the one outside's garden is under, so a visitor sees one time of day
+behind every door. It is painted once into a 360° picture (the gradient warming toward the low sun
+in the west, haze, two ranges of far hills and a line of trees at the horizon, a few clouds lit gold
+on their sunny sides, the sun, and the ground below), and shown by direction, so each eye sees it
+at infinity: on a dome round a scene, or on any surface that looks out at the far distance, such as
+a window's glass or a skylight. Water can reflect the same picture, looked up the same way.
+
+```js
+import { skyDome, skyMaterial, skyTexture } from 'common/sky.js';
+
+const sky = skyTexture();                       // paint it once, and share it
+
+scene.add(skyDome(sky));                        // outside: a dome round the garden
+
+const glass = skyMaterial(sky, { yaw: 0 });     // a room: its windows' glass and its skylight
+windows.material = glass;                       // merged geometry is fine
+skylight.material = glass;
+```
+
+| Export | |
+|---|---|
+| `skyTexture({ canvas }?)` | The panorama: a `THREE.CanvasTexture`, 2048 × 1024, equirectangular, sRGB, repeating in u, without mipmaps. `canvas(width, height)` makes the canvases it paints on: the page's by default, or a stand-in in Node. It paints in 25 to 45 ms in Chrome on a desktop, the same picture every time (its clouds and trees come from a fixed seed). |
+| `skyDome(map)` | outside's dome: a sphere of radius 90 round the scene, drawn first (`renderOrder` -1), not writing depth, showing `map` by the direction from each eye. Named `'sky'`. |
+| `skyMaterial(map, { yaw = 0 }?)` | A material for glass or a skylight: it shows `map` by the direction from each eye to the surface, so the sky is at infinity and moves as the far distance does, with no frame per opening. It works on merged geometry, since it uses world positions. `yaw` turns the panorama (below). |
+| `SUN_DIR` | Toward the sun, a unit vector, frozen: low in the west, 25.4° up and 52.6° round from straight down the garden toward -x. outside bakes its light from it. |
+| `skyColor(el, toSun)` | The sky's colour before clouds, hills and the sun are painted over it, as `[r, g, b]` in sRGB 0 to 255 (not rounded), at elevation `el` (radians, + up) and `toSun`, the cosine of the angle from the sun. For light baked from the sky. |
+| `SKY_UV` | GLSL, `vec2 skyUv(vec3 d)`: where a direction falls in the picture. u is 0.5 straight down the garden (-z), rising toward +x; v is 0.5 at the horizon, 1 straight up. For a site's own shader, such as outside's water reflecting the sky. |
+
+`skyMaterial`'s uniforms are `uMap` (the panorama) and `uYaw` (radians); setting
+`material.uniforms.uYaw.value` turns the sky later, for another room, with no new material. The
+type `SkyMaterial` is in `sky.d.ts`. Both materials include three's `tonemapping_fragment` and
+`colorspace_fragment`; with no tone mapping, as the sites have, the sky shows as painted.
+
+**A room's yaw.** The panorama is laid out in the garden's frame: straight down the garden is -z,
+and the sun stands low to the left of it. `yaw` turns it about the vertical as three.js's
+`rotation.y` turns an object, so what the garden sees looking down -z, the room sees looking toward
+`(-sin yaw, 0, -cos yaw)`, and every bearing turns with it. A room picks its yaw by what it wants
+where:
+
+- **Laid out as the garden is**, or not minding: `yaw: 0`. The Hallway's end window looks down -z,
+  down the hall as one looks down the garden, so at 0 it shows the bearings its own picture shows
+  now, with the sun just off to the left.
+- **The garden's view down -z through a window that looks toward `w`** (a horizontal world
+  direction): `yaw = Math.atan2(-w.x, -w.z)`.
+- **The sun toward `w`**, through one particular window: `yaw = SUN_AZ - Math.atan2(w.x, -w.z)`,
+  with `SUN_AZ = Math.atan2(SUN_DIR[0], -SUN_DIR[2])`. A low sun straight through a window can
+  glare; a little to one side shows its glow.
+- **Turning with the room**: a room built in a group turned by `rotation.y = r`, whose layout is the
+  garden's, uses `yaw: r`.
+
+Every window and skylight of one room shares one yaw: there is one sky.
+
 ## Using it
 
 Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.2.0",
+  "common": "github:AriaMoKr/common#v0.3.0",
   "three": "0.186.1"
 }
 ```
 
 The package holds `src/` (the modules and their `.d.ts` files), the license and this README. It
 has no dependencies of its own and runs nothing on install. three is a peer dependency
-(`>=0.154.0`): `portal.js` and `fade.js` use the site's own, so a page has one three. In Node the
-modules import as `common/door.js` and so on, for a site's tests. To take a new version, move the
-tag in package.json and run `npm install`. v0.2.0 adds modules and leaves `door.js` and `nav.js`
-as they were in v0.1.0.
+(`>=0.154.0`): `portal.js`, `fade.js` and `sky.js` use the site's own, so a page has one three. In
+Node the modules import as `common/door.js` and so on, for a site's tests. To take a new version,
+move the tag in package.json and run `npm install`. Each version so far only adds modules: v0.3.0
+leaves the modules of v0.1.0 and v0.2.0 as they were.
 
 The sites load it in the browser in three ways, as they load layersharedsession.
 
@@ -375,7 +430,7 @@ and the page's import map maps the name to the copy:
 ```
 
 Then a module imports `common/door.js`, in the browser and in Node alike. The import map already
-maps `three`, which `portal.js` and `fade.js` import.
+maps `three`, which `portal.js`, `fade.js` and `sky.js` import.
 
 ### `server/vendor.js` (vrlbry, music)
 
@@ -391,8 +446,9 @@ The client names its modules by relative URL, as it does layersharedsession's:
 import { wayBack } from '../vendor/common/door.js';
 ```
 
-`door.js`, `nav.js` and `gamepad.js` import nothing. `portal.js` and `fade.js` import `three` by
-its bare name, which the page's import map maps, as it does for layersharedsession's `avatars.js`;
+`door.js`, `nav.js` and `gamepad.js` import nothing. `portal.js`, `fade.js` and `sky.js` import
+`three` by its bare name, which the page's import map maps, as it does for layersharedsession's
+`avatars.js`;
 so `BARE` needs no entries, and they are for the page, not a worker, which has no import map.
 `tools/build-pages.mjs` copies them into the published site with the rest of what the client
 imports. Tests in Node import `common/door.js` and so on.
@@ -400,7 +456,7 @@ imports. Tests in Node import `common/door.js` and so on.
 ### Vite (breadboard)
 
 Import it by name. Vite resolves it through the package's `exports` and bundles it, with the
-site's own three for `portal.js` and `fade.js`:
+site's own three for `portal.js`, `fade.js` and `sky.js`:
 
 ```ts
 import { readVisit, wayBack, type WayBack } from 'common/door.js';
@@ -411,38 +467,43 @@ import { Fade } from 'common/fade.js';
 
 TypeScript, with `moduleResolution: "bundler"`, reads the `.d.ts` beside each module, so no
 declarations of the site's own are needed (`test/types/` compiles a file the way breadboard's
-tsconfig does). `portal.d.ts` and `fade.d.ts` refer to three's types, from the site's
+tsconfig does). `portal.d.ts`, `fade.d.ts` and `sky.d.ts` refer to three's types, from the site's
 `@types/three`.
 
 ## Coming from a site's own copy
 
-Every site took `door.js` and `nav.js` from here at v0.1.0. What changes for each when it takes
-the three.js pieces of v0.2.0 in place of its own copies:
+Every site took `door.js` and `nav.js` at v0.1.0, and the portal, the fade and the gamepad at
+v0.2.0 (vrlbry and music keep their own gamepad reader, on `stick` and the rest). What changes for
+each when it takes the sky of v0.3.0 in place of its own:
 
-- **hallway** (`public/js/portal.js`, `fade.js`, `gamepad.js`) and **outside** (the same three
-  files): import them from `common/`; the calls stay as they are. hallway's end window passes no
-  colour, as now, and outside's `setView` is the same.
-- **vrlbry and music** (`public/js/world/portal.js`): the portal from `common/portal.js`, with
-  `setPicture(material, map, view)` renamed to `setView(material, map, view)`. The door always
-  passes a colour, so its veil is drawn as before, and `uMap`, `uTime` and `uGlow` are where they
-  were. The gamepad (`public/js/xr/gamepad.js`) can stay as it is, its reader its own, or build on
-  `stick`, `held`, `BUTTONS`, `DEADZONE` and `firstPad` from `common/gamepad.js`, which are its own
-  pieces under the same names.
-- **breadboard** (`src/vr/portal.ts`, `fade.ts`): the portal from `common/portal.js`, passing an
-  object instead of arguments in order: `portalMaterial({ ...PICTURE, map: fallback, width,
-  height, color: glow })`, and `type PortalMaterial` from there too. `Fade` from `common/fade.js`,
-  still `new Fade(camera, 0)`.
+- **outside** (`public/js/sky.js`, and `SUN_DIR` in `bake.js`): both move here. `scene.js` takes
+  `skyTexture` and `skyDome`, `water.js` `SKY_UV` and `SUN_DIR`, and `bake.js` imports `SUN_DIR`
+  for its light. The garden looks the same: the painter is outside's, call for call.
+- **hallway** (`public/js/textures.js` `skyTexture`, and the colours, sun and hills it copied from
+  outside's by hand): they go. The end window's glass shows common's sky through
+  `skyMaterial(skyTexture(), { yaw: 0 })` instead of a portal hung with a flat picture, so its view
+  is at infinity. Below the horizon it shows outside's plain ground fading off, not the fields
+  `textures.js` paints now. The window's baked daylight can come from `skyColor`.
+- **vrlbry and music** (`public/js/world/room.js`): the shared `sky` material becomes
+  `skyMaterial(skyTexture(), { yaw })`, for the windows' merged glass and the rotunda's skylight,
+  and the evening of `makeSkyCanvas` (`world/textures.js`) goes. The glass no longer needs its UVs
+  normalised for a picture. Each room picks its yaw (above).
+- **breadboard** has no sky to change.
 
 ## Developing
 
 ```bash
 npm install     # TypeScript, for the .d.ts files; three and @types/three, for the tests and the types
-npm test        # node --test "test/*.test.js": the portal and the fade are built in Node, no WebGL
+npm test        # node --test "test/*.test.js": the portal, the fade and the sky are built in Node, no WebGL
 npm run types   # src/*.d.ts from the JSDoc
 ```
 
 The `.d.ts` files are made from the JSDoc and committed. After changing a module's JSDoc, run
 `npm run types` and commit them with it: a test fails while they are stale.
+
+The sky is outside's picture, call for call: `test/sky.test.js` paints it on a stand-in canvas
+(`test/canvas.js`, which records every call) and checks its fingerprint against the one outside's
+painter gives. A change to how the sky looks changes that fingerprint, on purpose.
 
 The door contract is in links that are already out in the world, in the sites pinned to older
 versions of this package, and in bookmarks, so a change to it must keep reading the links the
