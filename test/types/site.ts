@@ -15,6 +15,8 @@ import { SKY_UV, SUN_DIR, skyColor, skyDome, skyMaterial, skyTexture } from 'com
 import type { SkyMaterial } from 'common/sky.js';
 import { ACCESS_DEFAULTS, ACCESS_KEY, Vignette, eyeLift, loadAccess, motionQuery, normalizeAccess, reduceMotion, saveAccess, watchMotion } from 'common/access.js';
 import type { Access, VignetteMaterial } from 'common/access.js';
+import { BackHistory } from 'common/back-history.js';
+import type { BackHistoryOptions } from 'common/back-history.js';
 
 const visit: Visit = readVisit('?from=hallway&dx=0.12');
 const dx: number | null = visit.dx;
@@ -78,6 +80,23 @@ const ring: VignetteMaterial = vignette.material;
 const lift: number = eyeLift(access);
 const accessKey: 'hallway.access' = ACCESS_KEY;
 
+// The browser's Back for an open book: along the links followed, then the book put away.
+const backOptions: BackHistoryOptions = { history, load: performance.timeOrigin, onBack: async (depth) => depth >= 0, onAway: () => {} };
+const backHistory = new BackHistory({ ...backOptions, prefix: 'vrlbry' });
+addEventListener('popstate', (e) => backHistory.popstate(e.state));
+backHistory.bookOut();
+backHistory.pushed(1);
+const throughHistory: boolean = backHistory.back();
+backHistory.cleared();
+const bookLevel: number = backHistory.level;
+
+// @ts-expect-error Back past the book's entry puts it away: the page says how
+new BackHistory({ history, load: 1, onBack: () => true });
+// @ts-expect-error its fields' prefix is a name
+new BackHistory({ ...backOptions, prefix: 2 });
+// @ts-expect-error its helpers are its own
+backHistory._rewindTo(0);
+
 // @ts-expect-error motion is one of three
 const sometimes: Access = { ...ACCESS_DEFAULTS, motion: 'sometimes' };
 // @ts-expect-error the vignette moves on with the speed, the turning and whether in VR
@@ -109,4 +128,4 @@ NAV_DEFAULTS.move = 'teleport';
 // @ts-expect-error a view's sizes are numbers
 const depth: string = hung!.depth;
 
-export { dx, views, urls, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects, reduce, stopWatching, kept2, ring, lift, accessKey, sometimes };
+export { dx, views, urls, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects, reduce, stopWatching, kept2, ring, lift, accessKey, sometimes, throughHistory, bookLevel };

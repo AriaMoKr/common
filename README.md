@@ -16,12 +16,28 @@ environment and how the environment leads them back, and the three.js pieces the
 - **[`sky.js`](src/sky.js)**: outside's late afternoon, for every window behind every door.
 - **[`access.js`](src/access.js)**: accessibility settings every site shares: less motion, a comfort
   vignette in VR, and a seated mode.
+- **[`back-history.js`](src/back-history.js)**: the browser's Back for an open book, back along the
+  links followed in it and then putting it away.
 
 These are plain ES modules with JSDoc, with no build step. They run in the browser and in Node,
 for the sites' tests. `portal.js`, `fade.js`, `sky.js` and `access.js` import three by its bare
 name, from the site (a peer dependency, r154 or later); the others import nothing. A `.d.ts` beside
-each module gives TypeScript sites their types. Every site takes what v0.1.0 and v0.2.0 brought from
-here. The sky of v0.3.0 and the settings of v0.4.0 come to each site in changes of its own (see
+each module gives TypeScript sites their types.
+
+Beside them are the tools the sites' Node scripts run, never served to a page, and the workflow
+that publishes them:
+
+- **[`tools/chrome.mjs`](tools/chrome.mjs)**: Chrome over the DevTools protocol, headless or in a
+  window, on a profile that never costs a failed Windows logon.
+- **[`tools/serve.mjs`](tools/serve.mjs)**: the dev server for a site's `public/`, as GitHub Pages
+  serves it.
+- **[`tools/vendor.mjs`](tools/vendor.mjs)**: the copy of `node_modules` a site's pages import, into
+  `public/vendor/`.
+- **[`.github/workflows/pages.yml`](.github/workflows/pages.yml)**: the sites' GitHub Pages
+  workflow, for each site's own to call.
+
+Every site takes what v0.1.0 to v0.4.0 brought from here (breadboard has no sky). The modules,
+tools and workflow of v0.5.0 come to each site in a change of its own (see
 [Coming from a site's own copy](#coming-from-a-sites-own-copy)).
 
 ## Going in
@@ -476,34 +492,78 @@ The types `Access`, `VignetteMaterial` and `VignetteUniforms` are in `access.d.t
   still open; reading them on `pageshow` is enough for one that comes back from the back/forward
   cache.
 
+### `back-history.js`
+
+The browser's Back for an open book: vrlbry's and music's books off their shelves, outside's on
+the bench. Taking a book out adds a history entry at the same address, and so does each link
+followed in it. So the browser's Back (its button, a phone's back gesture, a mouse's back button,
+Quest Browser's) goes back one link at a time through those entries, as a toolbar's ↩ Back does,
+and then puts the book away. A book put away otherwise (Put back, ✕, Esc, B) takes its entries back
+out, so that Back then leaves the page as it would have. Forward brings back neither the links nor
+the book. Entries left by an earlier load of the page (before a reload) are passed over, and the
+entry the page is loaded on is the page's own again.
+
+```js
+import { BackHistory } from 'common/back-history.js';
+
+const backHistory = new BackHistory({
+  history,
+  load: performance.timeOrigin,             // this load of the page: its entries' mark
+  onBack: (depth) => book.backTo(depth),    // to where the trail was `depth` links deep; false if gone
+  onAway: () => closeBook({ away: true }),  // Back past the book's own entry (its entries are gone)
+});
+addEventListener('popstate', (e) => backHistory.popstate(e.state));
+
+backHistory.bookOut();                      // a book came out; one a link swaps in keeps the entries
+backHistory.pushed(trail.length);           // a link was followed
+if (!backHistory.back()) book.back();       // the toolbar's Back: through the history when it can
+backHistory.cleared();                      // the book was put away, not by Back
+```
+
+| Export | |
+|---|---|
+| `new BackHistory({ history, load, onBack, onAway, prefix? })` | `onBack(depth)` returns whether there is such a place, or a promise of it; when there is none, Back goes on to the book's own entry. |
+| `bookOut()`, `pushed(depth)`, `cleared()`, `popstate(state)` | As above. |
+| `back()` | Goes back through the history and is true when a link's entry is there; false when the toolbar must go back itself. |
+| `level` | How deep the current entry is: 0 the page, 1 a book out, 1 + n n links deep in it. |
+
+Its fields in an entry's state sit beside whatever the page keeps there (the address's), named
+from `prefix`: `backBook`, `backTrail` and `backLoad` by default. Each page has its own
+`history.state`, so the default suits every site. `prefix: 'vrlbry'` (or `'outside'`) keeps the
+names a site's own copy gave them, so the entries already in a visitor's history, in a tab left
+open across the change, are still its own; with the default, such an entry is the page's, and the
+first Back onto one may seem to do nothing. The type `BackHistoryOptions` is in `back-history.d.ts`.
+
 ## Using it
 
 Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.4.0",
+  "common": "github:AriaMoKr/common#v0.5.0",
   "three": "0.186.1"
 }
 ```
 
-The package holds `src/` (the modules and their `.d.ts` files), the license and this README. It
-has no dependencies of its own and runs nothing on install. three is a peer dependency
+The package holds `src/` (the modules and their `.d.ts` files), `tools/`, the license and this
+README. It has no dependencies of its own and runs nothing on install. three is a peer dependency
 (`>=0.154.0`): `portal.js`, `fade.js`, `sky.js` and `access.js` use the site's own, so a page has
-one three. In Node the modules import as `common/door.js` and so on, for a site's tests. To take a
-new version, move the tag in package.json and run `npm install`. Each version so far only adds
-modules: v0.4.0 leaves those of v0.1.0 to v0.3.0 as they were.
+one three. In Node the modules import as `common/door.js` and so on, for a site's tests, and the
+tools as `common/tools/serve.mjs` and so on. To take a new version, move the tag in package.json
+and run `npm install`. Each version so far only adds: v0.5.0 leaves the modules of v0.1.0 to v0.4.0
+as they were.
 
 The sites load it in the browser in three ways, as they load layersharedsession.
 
 ### A vendor copy and an import map (hallway, outside)
 
-`tools/vendor.mjs` copies the modules into `public/vendor/` on `npm install`, with these entries in
-its `FILES`:
+The vendor copy ([`tools/vendor.mjs`](#toolsvendormjs)) copies the modules into `public/vendor/` on
+`npm install`, with these entries in the site's `vendor.json` (in the `FILES` of its own
+`tools/vendor.mjs`, until it switches over):
 
-```js
-{ dir: 'common/src', to: 'common', ext: '.js' },
-{ from: 'common/LICENSE', to: 'common/LICENSE' },
+```json
+{ "dir": "common/src", "to": "common", "ext": ".js" },
+{ "from": "common/LICENSE", "to": "common/LICENSE" }
 ```
 
 and the page's import map maps the name to the copy:
@@ -555,12 +615,202 @@ declarations of the site's own are needed (`test/types/` compiles a file the way
 tsconfig does). `portal.d.ts`, `fade.d.ts`, `sky.d.ts` and `access.d.ts` refer to three's types, from the site's
 `@types/three`.
 
+## The tools
+
+Node scripts the sites run, as `common/tools/…`. They import only Node's own modules, so a site
+needs nothing else installed to run them, and they never reach a page: a site's vendor list names
+`common/src`, not `common/tools`.
+
+### `tools/chrome.mjs`
+
+Chrome over the DevTools protocol, for the tools that need a real browser: headless for pictures
+and checks (breadboard's `check-browser.mjs` and `make-icons.mjs`, outside's `preview.mjs` and
+`hallway-view.mjs`, the hallway's `door-views.mjs`), or in a window for measuring performance on a
+desktop (vrlbry's and music's `quest-perf.mjs`). Needs Node 22 or later (its built-in WebSocket)
+and an installed Chrome, Edge or Chromium; `CHROME_PATH` chooses one.
+
+```js
+import { Page, launchChrome } from 'common/tools/chrome.mjs';
+
+const chrome = await launchChrome();                  // headless
+const page = await chrome.newPage();
+await page.goto('http://127.0.0.1:8088/');
+const title = await page.evaluate('document.title');
+await chrome.close();                                 // ends Chrome and removes its profile
+
+// A window, on the page to measure: its DevTools endpoint is what --cdp took.
+const shown = await launchChrome({ headless: false, url: 'http://localhost:8080/?perf' });
+const tabs = await (await fetch(`${shown.endpoint}/json/list`)).json();
+const perf = await Page.connect(tabs.find((t) => t.type === 'page').webSocketDebuggerUrl);
+```
+
+| Export | |
+|---|---|
+| `launchChrome({ headless = true, args = [], url = 'about:blank' })` | Starts Chrome on a new profile (below) with its DevTools port open. Resolves to `{ endpoint, profile, process, newPage(), close() }`: `endpoint` is `http://127.0.0.1:<port>`, as a browser started with `--remote-debugging-port` has; `newPage()` opens a tab; `close()` ends Chrome and removes the profile. `args` are more switches (`--window-size=1280,800`); `url` is what the first tab opens. |
+| `Page` | One tab: `Page.connect(webSocketDebuggerUrl)`, `send(method, params)`, `on(event, fn)`, `evaluate(expression)` (promises awaited, the page's error thrown), `goto(url, settleMs = 1500)`, `close()`. What is waiting fails when the tab closes, as a window closed by hand does. |
+| `findChrome()` | `CHROME_PATH`, else the first Chrome, Edge or Chromium installed. |
+| `newProfile({ platform?, now? })` | The profile each Chrome starts on: a new folder in the temp folder, with its `Local State` written first on Windows. |
+| `localState(now?)` | That `Local State`. |
+| `sleep(ms)` | |
+
+**The profile, and Windows logons.** Current Chrome opens its DevTools port only on a profile that
+is not the default one, so a Chrome started by hand with `--remote-debugging-port` must be given a
+new `--user-data-dir`. On Windows, Chrome on a new profile checks whether the account's password is
+blank by logging on with an empty one: one failed logon each launch. Where a few failed logons lock
+the account (on this machine ten in ten minutes, for ten minutes, whether anyone is at the PC or
+not), a tool run a few times locks it. So `newProfile` writes the profile's `Local State` before
+Chrome starts:
+
+```json
+{"password_manager":{"os_password_blank":false,"os_password_last_changed":"<now, in microseconds since 1601-01-01 UTC>"}}
+```
+
+Chrome takes that answer and doesn't test; it tests again only if the password changes after that
+time. So start Chrome for a tool through `launchChrome`, not by hand on a new profile, and keep this
+step: `test/chrome.test.js` checks the file it writes without starting Chrome.
+
+### `tools/serve.mjs`
+
+```bash
+node node_modules/common/tools/serve.mjs [--root public] [--port 8080] [--host 0.0.0.0] [--name x]
+```
+
+serves the site's `public/` (from where it runs, the site's root) and prints
+`<name>: http://localhost:<port>/`, the name being the one in the site's `package.json`. As GitHub
+Pages does, a folder serves its `index.html` and every file comes with
+`access-control-allow-origin: *`: the Hallway reads the sites' pictures, and they read the
+Hallway's. WebXR needs a secure context, which `http://localhost` is; a headset reaches it over
+`adb reverse tcp:<port> tcp:<port>`. A site's own `tools/serve.mjs` keeps its port in two lines, so
+`npm start` stays as it is:
+
+```js
+// The dev server (common's) on the hallway's port: node tools/serve.mjs [--port 8088] [--host 0.0.0.0]
+import { start } from 'common/tools/serve.mjs';
+await start(process.argv.slice(2), { port: 8088 });
+```
+
+| Export | |
+|---|---|
+| `serve(root, { port = 0, host = '127.0.0.1' })` | Serves the folder; resolves to the listening `http.Server` (port 0: a free one, `server.address().port`). For the tools that render it in a browser. |
+| `start(args?, defaults?)` | The command, over a site's defaults (`{ root, port, host, name }`); resolves to the server. |
+| `options(args, defaults?, cwd?)` | The command's options. |
+| `TYPES` | The content types it sends, by extension: the hallway's and outside's. |
+
+### `tools/vendor.mjs`
+
+Copies what the site's pages import from its `node_modules` into `public/vendor/`, so `public/` is
+the whole site, served as it is and published as it is. It runs from the site's root after
+`npm install`:
+
+```json
+"scripts": {
+  "postinstall": "node node_modules/common/tools/vendor.mjs"
+}
+```
+
+and copies what the site's `vendor.json`, beside its `package.json`, lists. Part of the hallway's:
+
+```json
+[
+  { "from": "three/build/three.module.js", "to": "three/build/three.module.js" },
+  { "from": "three/build/three.core.js", "to": "three/build/three.core.js" },
+  { "from": "iwer/build/iwer.module.js", "to": "iwer/iwer.module.js", "optional": true },
+  { "dir": "common/src", "to": "common", "ext": ".js" },
+  { "dir": "@trystero-p2p/core/dist", "to": "trystero-core", "ext": ".mjs" }
+]
+```
+
+Each entry is a file, `{ "from", "to", "optional"? }`, or every module of a folder,
+`{ "dir", "to", "ext"? }`: not its subfolders, and with `ext` left out its `.js` and `.mjs` files,
+so source maps and `.d.ts` files stay behind. `from` and `dir` are in `node_modules`, `to` in
+`public/vendor/`. A required entry that is missing fails the install and leaves the copies as they
+were; an optional one is passed over. Otherwise `public/vendor/` is emptied first, so nothing stale
+stays. Only `common/src` goes to a page, never `common/tools`.
+
+Installed under someone's `node_modules` (layersharedsession under the hallway's), a site is not
+served there, so the tool copies nothing. But npm runs such a package's postinstall in its folder
+there, `hallway/node_modules/layersharedsession`, where there is no `node_modules/common`: common,
+a devDependency of its, isn't installed for it, and the hallway's own copy sits beside it. So
+`node node_modules/common/tools/vendor.mjs` would fail the hallway's `npm install`. Such a package
+keeps `"postinstall": "node tools/vendor.mjs"` (and that file in its `files`), which checks first:
+
+```js
+// common's tools/vendor.mjs, but not where this package is installed under someone's node_modules:
+// common is not there, and nothing is served there.
+import { sep } from 'node:path';
+if (!process.cwd().split(sep).includes('node_modules')) (await import('common/tools/vendor.mjs')).run();
+```
+
+| Export | |
+|---|---|
+| `vendor(root?, { list?, out? })` | Copies the list (the site's `vendor.json`) into `out` (`public/vendor/`); returns `{ skipped, out, copied }`. `root` is where it runs. |
+| `run(root?)` | The command: copies and says so; on an error, says it and sets the exit code, which fails the install. |
+| `readList(root)` | The site's list, checked: each entry a file or a folder with a `to`, all inside `node_modules` and `public/vendor/`. |
+| `installed(root)` | Whether the site is under someone's `node_modules`. |
+| `LIST` | `'vendor.json'`. |
+
+## The Pages workflow
+
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) is a reusable workflow
+(`on: workflow_call`): the hallway's build and deploy jobs, with breadboard's `configure-pages` and
+its checkout without persisted credentials. It checks the site out, sets up Node with npm's cache,
+runs `npm ci` and `npm test`, then the site's build if it has one, and uploads the folder it
+publishes and deploys it to the `github-pages` environment.
+
+| Input | Default | |
+|---|---|---|
+| `node-version` | `'24'` | The current LTS. |
+| `build` | none | A command run after the tests: breadboard's `npm run build`. |
+| `path` | `public` | The folder published: breadboard's `dist`. |
+
+A site's `.github/workflows/pages.yml` keeps its triggers, its permissions and its concurrency, and
+has one job:
+
+```yaml
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push waits rather than cancelling one in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  pages:
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.5.0
+```
+
+Breadboard's job adds its build and folder:
+
+```yaml
+  pages:
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.5.0
+    with:
+      build: npm run build
+      path: dist
+```
+
+The called jobs get the permissions the caller grants: deploying needs `pages: write` and
+`id-token: write`. Once per repository, Settings → Pages → Build and deployment → Source is GitHub
+Actions, as now. To take a new version, move the tag after `@`, as in package.json. common itself
+has no Pages: the workflow runs only when a site calls it.
+
 ## Coming from a site's own copy
 
-Every site took `door.js` and `nav.js` at v0.1.0, and the portal, the fade and the gamepad at
-v0.2.0 (vrlbry and music keep their own gamepad reader, on `stick` and the rest).
+Every site took `door.js` and `nav.js` at v0.1.0, the portal, the fade and the gamepad at v0.2.0
+(vrlbry and music keep their own gamepad reader, on `stick` and the rest), the sky at v0.3.0
+(breadboard has none) and the accessibility settings at v0.4.0.
 
-**The sky (v0.3.0).** What changes for each when it takes the sky in place of its own:
+**The sky (v0.3.0).** What changed for each when it took the sky in place of its own:
 
 - **outside** (`public/js/sky.js`, and `SUN_DIR` in `bake.js`): both move here. `scene.js` takes
   `skyTexture` and `skyDome`, `water.js` `SKY_UV` and `SUN_DIR`, and `bake.js` imports `SUN_DIR`
@@ -576,7 +826,7 @@ v0.2.0 (vrlbry and music keep their own gamepad reader, on `stick` and the rest)
   normalised for a picture. Each room picks its yaw (above).
 - **breadboard** has no sky to change.
 
-**Accessibility (v0.4.0).** No site has these settings yet, so each takes them in new (see
+**Accessibility (v0.4.0).** No site had these settings, so each took them in new (see
 [Wiring it in](#accessjs)):
 
 - **hallway**: its 3D control panel (`panel.js`) gains rows for motion, the vignette and seated,
@@ -599,16 +849,63 @@ v0.2.0 (vrlbry and music keep their own gamepad reader, on `stick` and the rest)
   doorway's `uTime` is held. A `Vignette` beside the `Fade`, driven from `move.ts`'s walking and
   turning; the rig takes `eyeLift` in VR.
 
+**The Back, the tools and the workflow (v0.5.0).** Each site's copies of these are alike already;
+what changes for each when it takes common's in their place:
+
+- **hallway**:
+  - *serve*: `tools/serve.mjs` becomes the two lines above, on port 8088.
+  - *vendor*: its `tools/vendor.mjs` goes. Its `FILES` become `vendor.json`, entry for entry, and
+    its postinstall is `node node_modules/common/tools/vendor.mjs`.
+  - *the workflow*: `.github/workflows/pages.yml` calls common's, so on Node 24 rather than 22.
+  - *door views*: `tools/door-views.mjs` starts its own Chrome on the desktop instead of asking for
+    one started by hand (`--cdp`): `launchChrome({ url: 'http://localhost:8088/' })`, then its
+    `findPage` on `chrome.endpoint`, and `chrome.close()` when done. `headless: false` if the views
+    must be drawn by the GPU rather than headless Chrome's own. The Quest over adb stays as it is.
+- **outside**:
+  - *serve*: `tools/serve.mjs` keeps its `PUBLIC` and its port 8090 and takes the rest from common's;
+    `preview.mjs` and `hallway-view.mjs` import `serve` as now.
+  - *vendor*: as the hallway: its list is the hallway's.
+  - *Chrome*: `tools/lib/chrome.mjs` goes; `preview.mjs` and `hallway-view.mjs` import
+    `common/tools/chrome.mjs`. Their calls stay as they are.
+  - *the workflow*: as the hallway.
+  - *Back*: `public/js/back-history.js` goes, for common's, with `prefix: 'outside'` to keep the
+    names its entries have (or the default); `test/back-history.test.js` goes with it.
+- **layersharedsession**:
+  - *serve*: `tools/serve.mjs` becomes the two lines, on port 8092.
+  - *vendor*: its list goes to `vendor.json`. It is installed under the hallway's `node_modules`, so
+    its `tools/vendor.mjs` stays, as the guarded lines above (still in its `files`). common becomes
+    a devDependency of its.
+  - *the workflow*: as the hallway.
+- **breadboard**:
+  - *Chrome*: `scripts/lib/chrome.mjs` goes; `check-browser.mjs`, `check-input.mjs`, `make-icons.mjs`
+    and `make-preview.mjs` import `common/tools/chrome.mjs`, with their calls as they are.
+  - *the workflow*: one job, `with: { build: npm run build, path: dist }`. It is on Node 24 already.
+- **vrlbry and music**:
+  - *Back*: `public/js/back-history.js` goes, for common's, with `prefix: 'vrlbry'`, which keeps the
+    names in visitors' history; `test/client-back-history.test.js` passes as it is against it, and
+    can go.
+  - *quest-perf*: `tools/quest-perf.mjs` starts a window on the desktop instead of `--cdp` on a
+    browser started by hand: `launchChrome({ headless: false, url })`, its endpoint where the
+    headset's forwarded one goes, and `close()` at the end.
+  - *Node 24*: their own `pages.yml` stays (it builds the pages and the indexes), with
+    `node-version: 24`.
+
 ## Developing
 
 ```bash
 npm install     # TypeScript, for the .d.ts files; three and @types/three, for the tests and the types
 npm test        # node --test "test/*.test.js": the portal, the fade, the sky and the vignette are built in Node, no WebGL
 npm run types   # src/*.d.ts from the JSDoc
+CHROME_TEST=1 npm test   # and start a real Chrome, through launchChrome, on a served page
 ```
 
 The `.d.ts` files are made from the JSDoc and committed. After changing a module's JSDoc, run
-`npm run types` and commit them with it: a test fails while they are stale.
+`npm run types` and commit them with it: a test fails while they are stale. The tools have JSDoc
+but no `.d.ts`: the sites' scripts that run them are JavaScript.
+
+The tools are tested in temporary folders: the server on a free port, the vendor copy in a
+stand-in site (and from this package itself, to check only `src/` goes), and Chrome's profile
+without starting Chrome.
 
 The sky is outside's picture, call for call: `test/sky.test.js` paints it on a stand-in canvas
 (`test/canvas.js`, which records every call) and checks its fingerprint against the one outside's

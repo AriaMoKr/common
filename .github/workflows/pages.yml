@@ -1,0 +1,62 @@
+# The sites' GitHub Pages workflow, to call from a site's own (common itself has no Pages): the
+# site's tests, its build if it has one, then the folder it publishes, deployed. The hallway's jobs,
+# with breadboard's configure-pages and checkout without credentials.
+#
+# A site's .github/workflows/pages.yml keeps its triggers, its permissions and its concurrency, and
+# has one job:
+#
+#   jobs:
+#     pages:
+#       uses: AriaMoKr/common/.github/workflows/pages.yml@v0.5.0
+#       with:            # breadboard's; others leave these out
+#         build: npm run build
+#         path: dist
+#
+# Once per repository, Settings → Pages → Build and deployment → Source: GitHub Actions.
+name: Pages
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js to install and test with
+        type: string
+        default: '24'
+      build:
+        description: A command run after the tests (npm run build); none by default
+        type: string
+        default: ''
+      path:
+        description: The folder to publish
+        type: string
+        default: public
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - if: inputs.build != ''
+        run: ${{ inputs.build }}
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ inputs.path }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
