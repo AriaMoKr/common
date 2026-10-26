@@ -18,6 +18,8 @@ environment and how the environment leads them back, and the three.js pieces the
   vignette in VR, and a seated mode.
 - **[`back-history.js`](src/back-history.js)**: the browser's Back for an open book, back along the
   links followed in it and then putting it away.
+- **[`tv.js`](src/tv.js)**: the remote of the Hallway's Android TV app, and the page's answer to the
+  app's Back and Menu.
 
 These are plain ES modules with JSDoc, with no build step. They run in the browser and in Node,
 for the sites' tests. `portal.js`, `fade.js`, `sky.js` and `access.js` import three by its bare
@@ -37,8 +39,9 @@ that publishes them:
   workflow, for each site's own to call.
 
 Every site takes what v0.1.0 to v0.4.0 brought from here (breadboard has no sky). The modules,
-tools and workflow of v0.5.0 come to each site in a change of its own (see
-[Coming from a site's own copy](#coming-from-a-sites-own-copy)).
+tools and workflow of v0.5.0, and the TV module of v0.6.0, come to each site in a change of its
+own (see [Coming from a site's own copy](#coming-from-a-sites-own-copy)).
+[The TV app](#the-tv-app) says what a site in the TV app does.
 
 ## Going in
 
@@ -196,6 +199,93 @@ It keeps them in `localStorage` under `hallway.nav`, as `{"move":"smooth","turn"
 site on `ariamokr.github.io` can read and write that key, so a visitor's choice comes with them
 through the doors, and a choice made in an environment is kept in the Hallway too. `nav.js` reads
 and writes it.
+
+## The TV app
+
+[HallwayApp](https://github.com/AriaMoKr/HallwayApp) puts the Hallway on an Android TV: the
+published site in a full-screen WebView, walked with the TV's remote. Links on
+`ariamokr.github.io` stay in the app, so every site behind a door runs there too.
+
+**Knowing it is the TV.** The WebView's user agent ends with ` HallwayTV/<version>`, the version
+starting with a digit (`HallwayTV/1.0.0`, `HallwayTV/0.0.0-dev`). `isTV(navigator.userAgent)` looks
+for it. `tvMode()` is that, or `?tv=emulate` in the page's address, which shows the TV's page in
+any browser.
+
+**The remote.** The D-pad reaches the page as the arrow keys and OK as Enter, with an empty `code`
+(WebView's mapping; keys sent with `adb shell input keyevent` have none either), so a site's key
+map reads `keyOf(e)` rather than `e.code`. On a TV, WebView moves the focus with any arrow the page
+doesn't take (spatial navigation), and OK follows a focused link. With TalkBack on, TalkBack takes
+the arrows before the page gets them. OK on the view, Menu and Back, the channel and media keys and
+a gamepad still reach the page, and `keyOf` reads four of those keys as the arrows ([`tv.js`](#tvjs)).
+
+**Back and Menu.** The app keeps these two keys and asks the page about each press. It calls
+`window.hallwayTV.back()` on Back, and `window.hallwayTV.menu()` on Menu or a long press of Back.
+Unless the call returns `true`, the app goes back a page, or leaves when there is none to go back to. `true`
+means the page used the key: the focus came out of the card to walking, or the site took a step
+of its own. A page without `window.hallwayTV` gets the plain Back. A `Remote` puts `{ menu, back }`
+there with `answerApp()`, in TV mode only.
+
+**Back and the page's history.** The app's back a page is the WebView's, through the page's
+history. So an entry the page pushed is a page to go back through first: BackHistory's book, and
+each link followed in it, are put away and gone back through by the app's own Back, through
+`popstate`, as by a browser's. A step of the site's own (`Remote`'s `step`) is for what has no
+entry: standing up from a bench, closing a text view, a book without an entry. A book with its
+entry is left to the app's back (`step()` returns false for it), or Back would take two steps: the
+book put back by the step, then the page gone back from.
+
+Chromium has one exception. It leaves out of Back's history the entries of a page nobody has pressed a key on or
+clicked. A book taken out with the remote's OK has had a key press, so its entry is there. One
+taken out with a gamepad alone, on a page nobody has pressed a key on, may have none:
+`navigator.userActivation.hasBeenActive` is false when it comes out. Then the step puts it back
+itself.
+
+```js
+let bookEntry = false;                      // the book's entry is one the app's Back will come to
+function takeOut(book) {
+  backHistory.bookOut();
+  bookEntry = navigator.userActivation?.hasBeenActive ?? true;
+  /* … */
+}
+const step = () => {
+  if (textView.open) return textView.close(), true;
+  if (book.open && !(bookEntry && backHistory.level > 0)) return putBack(book), true;
+  if (seated) return standUp(), true;
+  return false;                             // the app's: back a page, through the book's entries
+};
+```
+
+### A site in the app
+
+What a site does to work with the remote, from what the hallway does:
+
+1. **The 10-foot view**: `html.tv` from `tvMode()`. The page is 960 × 540 at a pixel ratio of 2,
+   seen from across a room. The hallway's numbers, as a guide: 18 px text; a 4 px focus ring on a
+   9 px dark halo; a choice's label ringed rather than its small input; a larger aim dot.
+
+   ```css
+   html.tv, html.tv body { font-size: 18px; }
+   html.tv :focus-visible { outline: 4px solid #ffd98a; outline-offset: 3px; box-shadow: 0 0 0 9px rgba(0, 0, 0, 0.65); }
+   html.tv .settings label:has(input:focus-visible) { outline: 4px solid #ffd98a; outline-offset: 4px; border-radius: 4px; }
+   html.tv .settings label input:focus-visible { outline-width: 2px; outline-offset: 1px; box-shadow: none; }
+   html.tv .settings input { width: 20px; height: 20px; }
+   html.tv .aim { width: 26px; height: 26px; margin: -13px 0 0 -13px; border-width: 3px; }
+   ```
+2. **No Enter VR or Fullscreen**: the TV has neither, so the buttons go, and the page doesn't ask
+   for XR.
+3. **A `Remote`** over the page's card (`root`) and its canvas (`view`), with `use` as the
+   gamepad's A at the middle of the view. The aim dot shows while walking in TV mode
+   (`!remote.inCard`), with or without a pad.
+4. **`window.hallwayTV`** through the module (`remote.answerApp()`), with `step` for the site's
+   own Back.
+5. **Keys** read through `keyOf(e)`.
+6. **Whatever needs a letter key, the mouse or the wheel** (a 3D panel, a shortcut such as T) is
+   also a control in the card.
+7. **In a shared session**, the invite link shows as text to type elsewhere, with no Copy.
+8. **No controls that open a local file.**
+9. **The frame rate**, measured on the TV with HallwayApp's `tools/tv-check.mjs --url` (a debug
+   build). Lower the pixel ratio until the page holds 60 fps at 1080p; the hallway holds it at 2.
+10. **Testing in a browser**: `?tv=emulate`, with `remote.menu()` standing in for Menu (or
+    `hallwayTV.menu()` in the console). In the card, Escape stands in for Back.
 
 ## The modules
 
@@ -534,13 +624,82 @@ names a site's own copy gave them, so the entries already in a visitor's history
 open across the change, are still its own; with the default, such an entry is the page's, and the
 first Back onto one may seem to do nothing. The type `BackHistoryOptions` is in `back-history.d.ts`.
 
+### `tv.js`
+
+The TV app's remote ([The TV app](#the-tv-app)): the hallway's, with a step of the site's own for
+Back and what the other sites' controls need. Walking, the 3D view holds the focus and the arrows
+are the site's. In the card, the remote moves the focus from control to control.
+
+| Key | Walking | In the card |
+|---|---|---|
+| ↑ ↓ | the site's (walk) | from control to control; a radio group is one stop, at its checked option |
+| ← → | the site's (turn) | through a choice (a radio group, a select), each option chosen as it is reached; elsewhere nothing |
+| OK (Enter) | `use()` | ticks a checkbox or a radio, opens a select's list; a link or a button as its own |
+| Menu (`menu()`) | into the card, to the control last left there | walking again |
+| Back (`back()`) | `step()`: true when it took one, else the app's | walking again |
+| Escape | the site's | walking again |
+
+A control that uses the arrows itself keeps them, in the card, for its own listener (on the control
+or inside the card; the site's walking listener on the window doesn't get them):
+
+- **An open combobox** (`role="combobox"` with `aria-expanded="true"`, such as vrlbry's search)
+  keeps ↑ and ↓, and Escape, which closes its list. Back sends it an Escape first, so the first
+  Back closes the list and the next walks. A list that stays open after the Escape is walked away
+  from.
+- **A range** keeps ← and → for its steps; ↑ and ↓ still go on.
+- **A text box's caret** keeps ← and → until it reaches that end, and then the focus stays.
+
+When the focus falls from the card to nowhere (a control blurs itself, as vrlbry's search does on
+Escape, or goes), the remote walks again, and Menu comes back to that control.
+
+```js
+import { Remote, keyOf, tvMode } from 'common/tv.js';
+
+const tv = tvMode();
+document.documentElement.classList.toggle('tv', tv);
+let remote = null;
+if (tv) {
+  remote = new Remote({
+    root: overlay.root,                     // the page's card (document.body for one spread out)
+    view: renderer.domElement,              // the 3D view, which holds the focus while walking
+    use: () => controls.useMiddle(),        // OK: the gamepad's A at the middle of the view
+    step,                                   // the site's own Back ("Back and the page's history")
+  });
+  remote.onMode = (inCard) => overlay.setHint(inCard ? 'tv-card' : 'tv');
+  remote.answerApp(tv);                     // window.hallwayTV = { menu, back }
+}
+addEventListener('keydown', (e) => {
+  const action = KEYS[keyOf(e)];            // 'KeyW', or 'ArrowUp' from the remote and its spares
+  /* … */
+});
+controls.onPadBack = () => remote?.padBack();
+```
+
+| Export | |
+|---|---|
+| `isTV(userAgent)` | The TV app's WebView: ` HallwayTV/<digit>…` in the user agent. |
+| `tvMode({ userAgent?, search? })` | `isTV`, or `?tv=emulate`; `navigator.userAgent` and `location.search` by default. |
+| `keyOf(e)` | `e.code \|\| e.key`, with the spare keys as the arrows: `ChannelUp` and `ChannelDown` as `ArrowUp` and `ArrowDown`, `MediaRewind` and `MediaFastForward` as `ArrowLeft` and `ArrowRight` (`SPARE_KEYS`). Play and pause, stop, next and the rest are as they are. |
+| `keepsKey(el, key)` | Whether the focused control keeps the key, as above. |
+| `focusStops(items)`, `nextStop(n, at, dir)` | The card's stops, a radio group one, and the next stop, staying at the ends. |
+| `new Remote({ root, view, use, step? })` | Takes the keys before the site's listeners (the window's capture). |
+| `menu()`, `back()` | What the app calls. `menu()` is always true. `back()` is true in the card, else `step()`'s answer when it is `true`. |
+| `padBack()` | A gamepad's B: as `back()`, else back a page when there is one (a page can't leave the app). |
+| `walk()`, `toCard()`, `inCard`, `onMode(inCard)` | The focus to the view or into the card, which has it, and a callback as it moves. |
+| `answerApp(tv = tvMode())` | `window.hallwayTV = { menu, back }` in TV mode; true when it did. |
+
+The spare keys are there for TalkBack, which keeps the arrows: the card reads them as their arrows
+too, stepping a range or moving a caret itself and sending an open combobox the arrow. The type
+`RemoteOptions` is in `tv.d.ts`. The hallway's own Join form (`roomFromInput`) stays in the
+hallway: it needs layersharedsession's `isRoom`.
+
 ## Using it
 
 Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.5.0",
+  "common": "github:AriaMoKr/common#v0.6.0",
   "three": "0.186.1"
 }
 ```
@@ -550,7 +709,7 @@ README. It has no dependencies of its own and runs nothing on install. three is 
 (`>=0.154.0`): `portal.js`, `fade.js`, `sky.js` and `access.js` use the site's own, so a page has
 one three. In Node the modules import as `common/door.js` and so on, for a site's tests, and the
 tools as `common/tools/serve.mjs` and so on. To take a new version, move the tag in package.json
-and run `npm install`. Each version so far only adds: v0.5.0 leaves the modules of v0.1.0 to v0.4.0
+and run `npm install`. Each version so far only adds: v0.6.0 leaves the modules of v0.1.0 to v0.5.0
 as they were.
 
 The sites load it in the browser in three ways, as they load layersharedsession.
@@ -591,7 +750,7 @@ The client names its modules by relative URL, as it does layersharedsession's:
 import { wayBack } from '../vendor/common/door.js';
 ```
 
-`door.js`, `nav.js` and `gamepad.js` import nothing. `portal.js`, `fade.js`, `sky.js` and
+`door.js`, `nav.js`, `gamepad.js`, `back-history.js` and `tv.js` import nothing. `portal.js`, `fade.js`, `sky.js` and
 `access.js` import `three` by its bare name, which the page's import map maps, as it does for layersharedsession's
 `avatars.js`;
 so `BARE` needs no entries, and they are for the page, not a worker, which has no import map.
@@ -608,6 +767,7 @@ import { readVisit, wayBack, type WayBack } from 'common/door.js';
 import { loadNav, saveNav, type Nav } from 'common/nav.js';
 import { portalMaterial, setView, type PortalMaterial } from 'common/portal.js';
 import { Fade } from 'common/fade.js';
+import { Remote, keyOf, tvMode, type RemoteOptions } from 'common/tv.js';
 ```
 
 TypeScript, with `moduleResolution: "bundler"`, reads the `.d.ts` beside each module, so no
@@ -786,14 +946,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.5.0
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.0
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.5.0
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.0
     with:
       build: npm run build
       path: dist
@@ -890,6 +1050,18 @@ what changes for each when it takes common's in their place:
   - *Node 24*: their own `pages.yml` stays (it builds the pages and the indexes), with
     `node-version: 24`.
 
+**The TV app (v0.6.0).** Only the hallway has a TV view so far. The others take the module and
+[the checklist](#a-site-in-the-app) in a change of their own:
+
+- **hallway** (`public/js/tv.js`): it keeps `roomFromInput`, for its Join form, and takes `isTV`,
+  `focusStops`, `nextStop` and `Remote` from common's. `main.js`'s `tv` becomes `tvMode()`, and
+  its `window.hallwayTV = { … }` becomes `remote.answerApp(tv)`. Its card gains no step: walking,
+  Back is the app's. `controls.js`'s `KEYS[e.code || e.key]` becomes `KEYS[keyOf(e)]`, which adds
+  the spare keys. `test/tv.test.js` keeps the `roomFromInput` and style cases.
+- **vrlbry, music, outside and breadboard**: HallwayApp's README, "Behind the doors", lists what the
+  remote can't reach on each today. Each one's `step` is its own: putting a book back where its
+  entry isn't the app's, closing a text view, standing up from outside's bench.
+
 ## Developing
 
 ```bash
@@ -906,6 +1078,10 @@ but no `.d.ts`: the sites' scripts that run them are JavaScript.
 The tools are tested in temporary folders: the server on a free port, the vendor copy in a
 stand-in site (and from this package itself, to check only `src/` goes), and Chrome's profile
 without starting Chrome.
+
+The remote is tested over a stand-in DOM (`test/tv.test.js`: an event's path, focus and the
+selectors it uses), and with `CHROME_TEST=1` on a served page in a real Chrome too, its keys
+pressed through DevTools, so a range's and a caret's own steps are the browser's.
 
 The sky is outside's picture, call for call: `test/sky.test.js` paints it on a stand-in canvas
 (`test/canvas.js`, which records every call) and checks its fingerprint against the one outside's

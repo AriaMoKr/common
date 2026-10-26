@@ -1,8 +1,8 @@
 {
   "name": "common",
-  "version": "0.5.0",
-  "description": "Code shared by the sites behind the Hallway's doors: the door contract (a door's link, the way back, the view from the door), VR movement and accessibility settings, a three.js doorway, fade, comfort vignette, gamepad and sky, the browser's Back for an open book, and their dev server, vendor copy, Chrome launcher and Pages workflow.",
-  "keywords": ["webxr", "threejs", "hallway", "portal", "deep-link", "gamepad", "sky", "accessibility", "history", "devtools", "github-pages"],
+  "version": "0.6.0",
+  "description": "Code shared by the sites behind the Hallway's doors: the door contract (a door's link, the way back, the view from it), VR movement and accessibility settings, a three.js doorway, fade, comfort vignette, gamepad and sky, the browser's Back for an open book, the TV app's remote, and their dev server, vendor copy, Chrome launcher and Pages workflow.",
+  "keywords": ["webxr", "threejs", "hallway", "portal", "deep-link", "gamepad", "sky", "accessibility", "history", "tv", "devtools", "github-pages"],
   "homepage": "https://github.com/AriaMoKr/common#readme",
   "repository": {
     "type": "git",
@@ -26,6 +26,7 @@
     "./nav.js": "./src/nav.js",
     "./portal.js": "./src/portal.js",
     "./sky.js": "./src/sky.js",
+    "./tv.js": "./src/tv.js",
     "./tools/chrome.mjs": "./tools/chrome.mjs",
     "./tools/serve.mjs": "./tools/serve.mjs",
     "./tools/vendor.mjs": "./tools/vendor.mjs",

@@ -17,6 +17,8 @@ import { ACCESS_DEFAULTS, ACCESS_KEY, Vignette, eyeLift, loadAccess, motionQuery
 import type { Access, VignetteMaterial } from 'common/access.js';
 import { BackHistory } from 'common/back-history.js';
 import type { BackHistoryOptions } from 'common/back-history.js';
+import { Remote, SPARE_KEYS, focusStops, isTV, keepsKey, keyOf, nextStop, tvMode } from 'common/tv.js';
+import type { RemoteOptions } from 'common/tv.js';
 
 const visit: Visit = readVisit('?from=hallway&dx=0.12');
 const dx: number | null = visit.dx;
@@ -97,6 +99,42 @@ new BackHistory({ ...backOptions, prefix: 2 });
 // @ts-expect-error its helpers are its own
 backHistory._rewindTo(0);
 
+// The TV app: the 10-foot view, the remote over the card and the view, and the app's Back and Menu.
+const tv: boolean = tvMode() || isTV(navigator.userAgent) || tvMode({ search: '?tv=emulate' });
+document.documentElement.classList.toggle('tv', tv);
+let reading = true;
+const remoteOptions: RemoteOptions = {
+  root: document.body,
+  view: document.createElement('canvas'),
+  use: () => {},
+  // A book with its entry in the page's history is the app's back; a text view open is a step.
+  step: () => backHistory.level === 0 && reading && !(reading = false),
+};
+const remote = new Remote(remoteOptions);
+remote.onMode = (inCard) => document.body.classList.toggle('in-card', inCard);
+const answering: boolean = remote.answerApp(tv);
+const stepped: boolean = remote.back();
+const intoCard: true = remote.menu();
+const inCard: boolean = remote.inCard;
+addEventListener('keydown', (e) => {
+  const named: string = keyOf(e);
+  const kept: boolean = keepsKey(document.activeElement, named);
+  if (!kept && named === SPARE_KEYS.ChannelUp) remote.padBack();
+});
+const stops: number[] = focusStops([{ radio: '' }, { radio: 'nav-move', checked: true }]);
+const next: number = nextStop(stops.length, -1, 1);
+
+// @ts-expect-error the step says whether it took one
+new Remote({ ...remoteOptions, step: () => {} });
+// @ts-expect-error OK while walking is the site's
+new Remote({ root: document.body, view: remoteOptions.view });
+// @ts-expect-error the spare keys stay as they are
+SPARE_KEYS.ChannelUp = 'ArrowDown';
+// @ts-expect-error its stops are its own
+remote._stops();
+// @ts-expect-error an address's search, not the whole of it
+tvMode({ search: new URLSearchParams() });
+
 // @ts-expect-error motion is one of three
 const sometimes: Access = { ...ACCESS_DEFAULTS, motion: 'sometimes' };
 // @ts-expect-error the vignette moves on with the speed, the turning and whether in VR
@@ -128,4 +166,4 @@ NAV_DEFAULTS.move = 'teleport';
 // @ts-expect-error a view's sizes are numbers
 const depth: string = hung!.depth;
 
-export { dx, views, urls, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects, reduce, stopWatching, kept2, ring, lift, accessKey, sometimes, throughHistory, bookLevel };
+export { dx, views, urls, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects, reduce, stopWatching, kept2, ring, lift, accessKey, sometimes, throughHistory, bookLevel, answering, stepped, intoCard, inCard, next };
