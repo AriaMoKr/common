@@ -776,6 +776,34 @@ describe('Remote, over a stand-in DOM', () => {
       assert.equal(at(), 'seated', 'that control gone');
       assert.equal(asked, 2);
     });
+
+    it('forgets the control left when the site says, so first() is asked again', () => {
+      let asked = 0;
+      const p = page({ first: () => (asked++, p.e.seated) });
+      p.remote.menu();
+      press('ArrowDown');
+      assert.equal(p.remote.back(), true);
+      assert.equal(dom.activeElement, p.view, 'walking, the range left');
+      p.remote.forget();
+      assert.equal(dom.activeElement, p.view, 'the focus as it was');
+      p.remote.menu();
+      assert.equal(at(), 'seated', "first()'s, not the control left");
+      assert.equal(asked, 2);
+      press('ArrowDown');
+      p.remote.forget(); // in the card: leaving it remembers the control left then
+      p.remote.menu();
+      p.remote.menu();
+      assert.equal(at(), 'size');
+      assert.equal(asked, 2);
+
+      const q = page();
+      q.remote.menu();
+      press('ArrowDown');
+      q.remote.menu();
+      q.remote.forget();
+      q.remote.menu();
+      assert.equal(at(), 'doors', 'without first(): the first stop that is not a text box');
+    });
   });
 
   describe('Back, step and the app', () => {

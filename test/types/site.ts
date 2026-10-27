@@ -118,6 +118,8 @@ const answering: boolean = remote.answerApp(tv);
 const stepped: boolean = remote.back();
 const intoCard: true = remote.menu();
 const inCard: boolean = remote.inCard;
+// The book opened: Menu goes to its buttons next, not to the control left in the card.
+remote.forget();
 addEventListener('keydown', (e) => {
   const named: string = keyOf(e);
   const kept: boolean = keepsKey(document.activeElement, named);

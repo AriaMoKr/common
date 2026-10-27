@@ -119,6 +119,13 @@ export class Remote {
     /** The focus into the card: the control last left there, else first(), else its first stop that isn't a text box. */
     toCard(): void;
     /**
+     * Forgets the control last left in the card, so Menu goes to first() next (else the card's first
+     * stop that isn't a text box): for when what the visitor is doing changes, such as a book
+     * opened, and that control no longer says where they are. In the card it changes nothing:
+     * leaving it remembers the control left then.
+     */
+    forget(): void;
+    /**
      * Answers the app (README, "The TV app"): in TV mode, window.hallwayTV = { menu, back }, which the
      * app calls on each press of Menu and of Back, going back a page (or leaving) unless it returns true.
      * @param {boolean} [tv] tvMode()

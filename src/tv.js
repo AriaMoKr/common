@@ -2,8 +2,9 @@
 // agent ends with " HallwayTV/<version>" (tvMode; ?tv=emulate shows the TV's page in any browser),
 // walked with the TV's remote. Walking, the 3D view holds the focus, the arrows walk and turn (the
 // site's own keys, read through keyOf), and OK uses the middle of the view, as a gamepad's A does.
-// Menu moves the focus into the card (to the control last left there, else first(), else its first
-// stop that isn't a text box), where up and down go from control to control (a choice one stop),
+// Menu moves the focus into the card (to the control last left there, unless the site has had it
+// forgotten, else first(), else its first stop that isn't a text box), where up and down go from
+// control to control (a choice one stop),
 // left and right through a choice, and OK ticks; Escape or Back walk again. A text box the remote
 // steps onto keeps the TV's keyboard down (inputmode="none") until OK on it. A control that
 // uses the arrows itself keeps them: an open combobox up and down (and Escape, as Back closes its
@@ -262,6 +263,16 @@ export class Remote {
     const to = this._last && stops.includes(this._last) ? this._last : this._firstStop(stops);
     if (to) this._focus(to);
     if (this.inCard) this.onMode(true);
+  }
+
+  /**
+   * Forgets the control last left in the card, so Menu goes to first() next (else the card's first
+   * stop that isn't a text box): for when what the visitor is doing changes, such as a book
+   * opened, and that control no longer says where they are. In the card it changes nothing:
+   * leaving it remembers the control left then.
+   */
+  forget() {
+    this._last = null;
   }
 
   /**

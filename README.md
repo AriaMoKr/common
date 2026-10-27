@@ -228,7 +228,10 @@ there with `answerApp()`, in TV mode only.
 **Where Menu lands.** Menu goes back to the control last left in the card. When there is none, it
 goes where the site's `first()` says: what the visitor is doing, such as outside's book buttons while
 reading. Without `first()`, Menu goes to the card's first stop that isn't a text box: the doors, not
-vrlbry's search box. Only a card of text boxes alone starts on one.
+vrlbry's search box. Only a card of text boxes alone starts on one. When what the visitor is doing
+changes, the control they left may no longer fit: in outside, Read the book is the control left once
+it has opened the book, and anyone who has been in the card has left one. The site then calls
+`forget()` (outside, as the book opens), and Menu goes to `first()` again.
 
 **Text boxes and the TV's keyboard.** On the TV, a text box raises the on-screen keyboard as soon
 as it has the focus, and the keyboard takes the arrows until Back hides it. So when the remote
@@ -290,8 +293,8 @@ What a site does to work with the remote, from what the hallway does:
    gamepad's A at the middle of the view. The aim dot shows while walking in TV mode
    (`!remote.inCard`), with or without a pad.
 4. **Where Menu lands**: `first` for what the visitor is doing, when there is no control to come
-   back to (the book's buttons while reading). Without it, Menu passes over the text boxes to the
-   card's first other stop.
+   back to (the book's buttons while reading), and `forget()` when that changes (the book opened).
+   Without `first`, Menu passes over the text boxes to the card's first other stop.
 5. **Text boxes**: the remote keeps their keyboard down while stepping and brings it up on OK,
    so the site sets no `inputmode="none"` of its own on them. Check on the TV that the keyboard
    stays down while the remote steps onto a box and past it, and comes up on OK.
@@ -656,7 +659,7 @@ are the site's. In the card, the remote moves the focus from control to control.
 | ↑ ↓ | the site's (walk) | from control to control; a radio group is one stop, at its checked option; a text box's keyboard kept down |
 | ← → | the site's (turn) | through a choice (a radio group, a select), each option chosen as it is reached; elsewhere nothing |
 | OK (Enter) | `use()` | ticks a checkbox or a radio, opens a select's list, brings up a text box's keyboard; a link or a button as its own |
-| Menu (`menu()`) | into the card: to the control last left there, else `first()`'s, else the first stop that isn't a text box | walking again |
+| Menu (`menu()`) | into the card: to the control last left there (unless `forget()` since), else `first()`'s, else the first stop that isn't a text box | walking again |
 | Back (`back()`) | `step()`: true when it took one, else the app's | walking again |
 | Escape | the site's | walking again |
 
@@ -696,6 +699,7 @@ if (tv) {
   remote.onMode = (inCard) => overlay.setHint(inCard ? 'tv-card' : 'tv');
   remote.answerApp(tv);                     // window.hallwayTV = { menu, back }
 }
+book.onOpen = () => remote?.forget();       // Menu to the book's buttons next, not to Read the book
 addEventListener('keydown', (e) => {
   const action = KEYS[keyOf(e)];            // 'KeyW', or 'ArrowUp' from the remote and its spares
   /* … */
@@ -714,6 +718,7 @@ controls.onPadBack = () => remote?.padBack();
 | `menu()`, `back()` | What the app calls. `menu()` is always true. `back()` is true in the card, else `step()`'s answer when it is `true`. |
 | `padBack()` | A gamepad's B: as `back()`, else back a page when there is one (a page can't leave the app). |
 | `walk()`, `toCard()`, `inCard`, `onMode(inCard)` | The focus to the view or into the card, which has it, and a callback as it moves. |
+| `forget()` | The control last left in the card forgotten: Menu goes to `first()` next. In the card it changes nothing. |
 | `answerApp(tv = tvMode())` | `window.hallwayTV = { menu, back }` in TV mode; true when it did. |
 
 The spare keys are there for TalkBack, which keeps the arrows: the card reads them as their arrows
@@ -727,7 +732,7 @@ Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.6.1",
+  "common": "github:AriaMoKr/common#v0.6.2",
   "three": "0.186.1"
 }
 ```
@@ -738,7 +743,8 @@ README. It has no dependencies of its own and runs nothing on install. three is 
 one three. In Node the modules import as `common/door.js` and so on, for a site's tests, and the
 tools as `common/tools/serve.mjs` and so on. To take a new version, move the tag in package.json
 and run `npm install`. Each version so far only adds. v0.6.1 changes only the remote in the card
-(its text boxes, and where Menu lands), and leaves the modules of v0.1.0 to v0.5.0 as they were.
+(its text boxes, and where Menu lands), v0.6.2 adds its `forget()`, and both leave the modules of
+v0.1.0 to v0.5.0 as they were.
 
 The sites load it in the browser in three ways, as they load layersharedsession.
 
@@ -974,14 +980,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.1
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.2
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.1
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.2
     with:
       build: npm run build
       path: dist
@@ -1078,7 +1084,7 @@ what changes for each when it takes common's in their place:
   - *Node 24*: their own `pages.yml` stays (it builds the pages and the indexes), with
     `node-version: 24`.
 
-**The TV app (v0.6.0, v0.6.1).** Only the hallway has a TV view so far. The others take the module
+**The TV app (v0.6.0 to v0.6.2).** Only the hallway has a TV view so far. The others take the module
 and [the checklist](#a-site-in-the-app) in a change of their own:
 
 - **hallway** (`public/js/tv.js`): it keeps `roomFromInput`, for its Join form, and takes `isTV`,
@@ -1090,7 +1096,8 @@ and [the checklist](#a-site-in-the-app) in a change of their own:
 - **vrlbry, music, outside and breadboard**: HallwayApp's README, "Behind the doors", lists what the
   remote can't reach on each today. Each one's `step` is its own: putting a book back where its
   entry isn't the app's, closing a text view, standing up from outside's bench. So is each one's
-  `first`: outside's book buttons while reading, not "← Hallway". vrlbry's Menu passes over its
+  `first`: outside's book buttons while reading, not "← Hallway", with `forget()` as the book opens
+  (v0.6.2). vrlbry's Menu passes over its
   search box without one, and its search and ZIM address boxes keep the keyboard down until OK.
 
 ## Developing
