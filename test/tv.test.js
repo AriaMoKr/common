@@ -218,6 +218,10 @@ class El {
     this.attrs[n] = String(v);
   }
 
+  removeAttribute(n) {
+    delete this.attrs[n];
+  }
+
   contains(o) {
     for (let n = o; n; n = n.parent) if (n === this) return true;
     return false;
@@ -249,6 +253,7 @@ class El {
 
   focus() {
     focusOn(this);
+    this.focused = (this.focused ?? 0) + 1;
   }
 
   blur() {
@@ -336,7 +341,7 @@ const saved = {};
  * a select, a combobox and a text area, with a hidden and a disabled button and a span out of the
  * tab order. `walked` is what reaches the site's own listener on the window.
  */
-function page({ step, rootIsBody = false, empty = false } = {}) {
+function page({ step, first, rootIsBody = false, empty = false, lead = [] } = {}) {
   win.listeners = [];
   const body = new El('body');
   dom.body = body;
@@ -344,6 +349,7 @@ function page({ step, rootIsBody = false, empty = false } = {}) {
   const view = body.append(new El('canvas'));
   const e = {};
   const card = body.append(new El('div'));
+  for (const el of lead) e[el.id] = card.append(el);
   if (!empty) {
     e.doors = card.append(new El('a', { id: 'doors', attrs: { href: '#doors' } }));
     e.together = card.append(new El('button', { id: 'together' }));
@@ -370,7 +376,7 @@ function page({ step, rootIsBody = false, empty = false } = {}) {
   e.size?.addEventListener('change', () => changes.push(`change ${e.size.value}`));
   const used = [];
   const modes = [];
-  const remote = new Remote({ root: rootIsBody ? body : card, view, use: () => used.push(dom.activeElement), step });
+  const remote = new Remote({ root: rootIsBody ? body : card, view, use: () => used.push(dom.activeElement), step, first });
   remote.onMode = (inCard) => modes.push(inCard);
   return { remote, view, card, body, e, walked, own, changes, used, modes };
 }
@@ -639,6 +645,139 @@ describe('Remote, over a stand-in DOM', () => {
     });
   });
 
+  describe('a text box the remote steps onto', () => {
+    const box = (id, attrs = {}) => new El('input', { id, type: 'text', value: '', selectionStart: 0, selectionEnd: 0, attrs });
+    const mode = (el) => el.getAttribute('inputmode');
+
+    it('keeps the keyboard down while stepping onto it and past it', () => {
+      const p = page();
+      p.remote.menu();
+      while (at() !== 'search') press('ArrowDown');
+      assert.equal(mode(p.e.search), 'none');
+      press('ArrowDown');
+      assert.equal(at(), 'notes');
+      assert.equal(mode(p.e.search), null, 'its own back: none');
+      assert.equal(mode(p.e.notes), 'none', 'a text area too');
+      press('ChannelUp');
+      assert.equal(mode(p.e.search), 'none');
+      assert.equal(mode(p.e.notes), null);
+      assert.equal(press('ArrowLeft').defaultPrevented, false, 'its caret still keeps left and right');
+      assert.deepEqual(p.own, ['search ArrowLeft']);
+      press('ArrowUp');
+      assert.equal(at(), 'theme');
+      assert.equal(mode(p.e.search), null);
+      for (const k of ['size', 'theme', 'doors', 'together']) assert.equal(mode(p.e[k]), null, `${k}: not a text box`);
+    });
+
+    it("gives a box its own inputmode back, however the focus leaves it", () => {
+      const p = page({ lead: [box('room', { inputmode: 'latin' })] });
+      p.remote.menu();
+      press('ArrowUp');
+      assert.equal(at(), 'room');
+      assert.equal(mode(p.e.room), 'none');
+      press('ArrowDown');
+      assert.equal(mode(p.e.room), 'latin', 'stepped past');
+      press('ArrowUp');
+      press('Escape');
+      assert.equal(mode(p.e.room), 'latin', 'Escape');
+      p.remote.menu();
+      assert.equal(at(), 'room', 'Menu comes back to it');
+      assert.equal(mode(p.e.room), 'none', 'held again');
+      p.remote.back();
+      assert.equal(mode(p.e.room), 'latin', 'Back');
+      p.remote.menu();
+      p.remote.menu();
+      assert.equal(mode(p.e.room), 'latin', 'Menu');
+      assert.equal(dom.activeElement, p.view);
+    });
+
+    it("brings the keyboard up on OK: its inputmode back and the focus given again, not the form's Enter", async () => {
+      const p = page();
+      p.remote.menu();
+      while (at() !== 'search') press('ArrowDown');
+      const focused = p.e.search.focused;
+      assert.equal(press('Enter').defaultPrevented, true, 'no submit');
+      assert.equal(mode(p.e.search), null);
+      assert.equal(p.e.search.focused, focused + 1, 'focused again');
+      assert.equal(at(), 'search');
+      await settle();
+      assert.equal(at(), 'search', 'the blur in between is not a fall to nowhere');
+      assert.deepEqual(p.modes, [true]);
+      assert.deepEqual(p.own, [], "the OK was the remote's");
+      assert.equal(press('Enter').defaultPrevented, false, "the next is the box's own");
+      assert.deepEqual(p.own, ['search Enter']);
+      press('ArrowDown');
+      press('ArrowUp');
+      assert.equal(mode(p.e.search), 'none', 'stepped onto again, held again');
+    });
+
+    it('holds only what the remote steps onto: a box the site focuses itself is its own', () => {
+      const p = page();
+      p.remote.menu();
+      p.e.search.focus();
+      assert.equal(mode(p.e.search), null);
+      assert.equal(press('Enter').defaultPrevented, false);
+      assert.deepEqual(p.own, ['search Enter']);
+    });
+  });
+
+  describe('where Menu lands', () => {
+    const box = (id) => new El('input', { id, type: 'search', value: '', selectionStart: 0, selectionEnd: 0 });
+
+    it('without first(), at the first stop that is not a text box', () => {
+      const p = page({ lead: [box('find')] });
+      p.remote.menu();
+      assert.equal(at(), 'doors');
+      assert.equal(p.e.find.getAttribute('inputmode'), null, 'never stepped onto');
+      press('ArrowUp');
+      assert.equal(at(), 'find', 'still a stop');
+      assert.equal(p.e.find.getAttribute('inputmode'), 'none');
+    });
+
+    it('in a card of text boxes alone, at the first, its keyboard down', () => {
+      const p = page({ empty: true, lead: [box('room'), box('name')] });
+      p.remote.menu();
+      assert.equal(at(), 'room');
+      assert.equal(p.e.room.getAttribute('inputmode'), 'none');
+    });
+
+    it("with first(), at its stop: itself, the first inside it, or its choice's", () => {
+      const land = (pick) => {
+        const p = page({ lead: [box('find')], first: () => pick(p) });
+        p.book = p.card.append(new El('div', { id: 'book' }, [new El('span', { id: 'title' }), new El('button', { id: 'putBack' }), new El('button', { id: 'next' })]));
+        p.remote.menu();
+        return at();
+      };
+      assert.equal(land((p) => p.e.seated), 'seated');
+      assert.equal(land((p) => p.book), 'putBack', "a part of the card: its first stop");
+      assert.equal(land((p) => p.e.moveA), 'moveB', "an option: its choice's stop, the checked one");
+      assert.equal(land((p) => p.e.search), 'search', 'a text box, if asked for');
+      assert.equal(land(() => null), 'doors', 'none');
+      assert.equal(land(() => undefined), 'doors');
+      assert.equal(land((p) => p.e.hidden), 'doors', 'hidden: not a stop');
+      assert.equal(land((p) => p.e.off), 'doors', 'disabled');
+      assert.equal(land((p) => p.view), 'doors', 'outside the card');
+      assert.equal(land((p) => p.e.span), 'doors', 'out of the tab order');
+    });
+
+    it('asks first() only when there is no control to come back to', () => {
+      let asked = 0;
+      const p = page({ first: () => (asked++, p.e.seated) });
+      p.remote.menu();
+      assert.equal(at(), 'seated');
+      press('ArrowDown');
+      p.remote.menu();
+      p.remote.menu();
+      assert.equal(at(), 'size', 'back to the control left');
+      assert.equal(asked, 1);
+      p.remote.menu();
+      p.e.size.hidden = true;
+      p.remote.menu();
+      assert.equal(at(), 'seated', 'that control gone');
+      assert.equal(asked, 2);
+    });
+  });
+
   describe('Back, step and the app', () => {
     it('in the card, walks again and says so, without a step', () => {
       let steps = 0;
@@ -747,13 +886,51 @@ describe('Remote, over a stand-in DOM', () => {
 // A real page in a real Chrome (through launchChrome, so no Windows logon): the real selectors,
 // focus and visibility, and the browser's own steps for a range and a caret, pressed through DevTools.
 describe('a real Chrome', { skip: process.env.CHROME_TEST ? false : 'set CHROME_TEST=1 to start Chrome' }, () => {
-  it('walks, goes into the card and through it, and answers the app, at ?tv=emulate', async () => {
+  /** Serves `body` with tv.js, opens it at ?tv=emulate, and runs `test` with the page's helpers. */
+  async function withPage(body, test) {
     const site = mkdtempSync(join(tmpdir(), 'common-tv-'));
     copyFileSync(fileURLToPath(new URL('../src/tv.js', import.meta.url)), join(site, 'tv.js'));
-    writeFileSync(
-      join(site, 'index.html'),
-      `<!doctype html><meta charset="utf-8"><title>tv</title>
-<canvas id="view" width="320" height="180"></canvas>
+    writeFileSync(join(site, 'index.html'), `<!doctype html><meta charset="utf-8"><title>tv</title>\n${body}`);
+    const server = await serve(site);
+    const url = `http://127.0.0.1:${server.address().port}/?tv=emulate`;
+    const chrome = await launchChrome({ url });
+    try {
+      let target = null;
+      for (let i = 0; i < 50 && !target; i++) {
+        const list = await (await fetch(`${chrome.endpoint}/json/list`)).json();
+        target = list.find((t) => t.type === 'page' && t.url === url);
+        if (!target) await sleep(100);
+      }
+      assert.ok(target, 'the page');
+      const page = await Page.connect(target.webSocketDebuggerUrl);
+      try {
+        for (let i = 0; i < 50 && !(await page.evaluate('window.ready === true')); i++) await sleep(100);
+        const js = (expression) => page.evaluate(expression);
+        const VK = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Enter: 13, Escape: 27 };
+        const key = async (k, code = '') => {
+          for (const type of ['rawKeyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: VK[k] ?? 0 });
+        };
+        // OK as the remote sends it, with its character, so that a form's Enter follows if let.
+        const ok = async () => {
+          await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: '', windowsVirtualKeyCode: 13, text: '\r' });
+          await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: '', windowsVirtualKeyCode: 13 });
+        };
+        const at = () => js('document.activeElement.id || document.activeElement.tagName');
+        const mode = (id) => js(`document.getElementById('${id}').getAttribute('inputmode')`);
+        await test({ js, key, ok, at, mode });
+      } finally {
+        page.close();
+      }
+    } finally {
+      await chrome.close();
+      server.close();
+      rmSync(site, { recursive: true, force: true });
+    }
+  }
+
+  it('walks, goes into the card and through it, and answers the app, at ?tv=emulate', async () => {
+    await withPage(
+      `<canvas id="view" width="320" height="180"></canvas>
 <div id="card">
   <a href="#doors" id="doors">Doors</a>
   <button id="together">Together</button>
@@ -793,28 +970,7 @@ describe('a real Chrome', { skip: process.env.CHROME_TEST ? false : 'set CHROME_
   window.answered = remote.answerApp();
   window.ready = true;
 </script>`,
-    );
-    const server = await serve(site);
-    const url = `http://127.0.0.1:${server.address().port}/?tv=emulate`;
-    const chrome = await launchChrome({ url });
-    try {
-      let target = null;
-      for (let i = 0; i < 50 && !target; i++) {
-        const list = await (await fetch(`${chrome.endpoint}/json/list`)).json();
-        target = list.find((t) => t.type === 'page' && t.url === url);
-        if (!target) await sleep(100);
-      }
-      assert.ok(target, 'the page');
-      const page = await Page.connect(target.webSocketDebuggerUrl);
-      try {
-        for (let i = 0; i < 50 && !(await page.evaluate('window.ready === true')); i++) await sleep(100);
-        const js = (expression) => page.evaluate(expression);
-        const VK = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Enter: 13, Escape: 27 };
-        const key = async (k, code = '') => {
-          for (const type of ['rawKeyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: VK[k] ?? 0 });
-        };
-        const at = () => js('document.activeElement.id || document.activeElement.tagName');
-
+      async ({ js, key, at, mode }) => {
         assert.equal(await js("document.documentElement.classList.contains('tv')"), true);
         assert.equal(await js('window.answered'), true);
         assert.equal(await at(), 'view');
@@ -831,8 +987,10 @@ describe('a real Chrome', { skip: process.env.CHROME_TEST ? false : 'set CHROME_
           seen.push(await at());
         }
         assert.deepEqual(seen, ['doors', 'together', 'moveB', 'seated', 'size', 'theme', 'search', 'notes', 'notes']);
+        assert.equal(await mode('notes'), 'none', 'its keyboard kept down');
         for (let i = 0; i < 5; i++) await key('ArrowUp', 'ArrowUp');
         assert.equal(await at(), 'moveB');
+        assert.equal(await mode('notes'), null, 'and its own inputmode back');
         await key('ArrowLeft', 'ArrowLeft');
         assert.equal(await at(), 'moveA');
         assert.equal(await js("document.querySelector('input[name=move]:checked').id"), 'moveA');
@@ -850,6 +1008,7 @@ describe('a real Chrome', { skip: process.env.CHROME_TEST ? false : 'set CHROME_
 
         await key('ArrowDown', 'ArrowDown');
         assert.equal(await at(), 'search');
+        assert.equal(await mode('search'), 'none');
         await js("document.getElementById('search').setSelectionRange(3, 3)");
         await key('ArrowRight', 'ArrowRight');
         assert.equal(await at(), 'search', 'at its end, still the box');
@@ -861,6 +1020,7 @@ describe('a real Chrome', { skip: process.env.CHROME_TEST ? false : 'set CHROME_
         await key('Escape', 'Escape');
         await sleep(50);
         assert.equal(await at(), 'view', 'its Escape let the focus go: walking');
+        assert.equal(await mode('search'), null);
 
         assert.deepEqual(await js('window.log.slice(3)'), ['change dark', 'search ArrowLeft', 'search ArrowDown', 'search Escape'], 'nothing walked in the card');
         assert.deepEqual(await js('window.modes'), [true, false]);
@@ -870,13 +1030,74 @@ describe('a real Chrome', { skip: process.env.CHROME_TEST ? false : 'set CHROME_
         assert.equal(await at(), 'search');
         assert.equal(await js('window.hallwayTV.back()'), true);
         assert.equal(await at(), 'view');
-      } finally {
-        page.close();
-      }
-    } finally {
-      await chrome.close();
-      server.close();
-      rmSync(site, { recursive: true, force: true });
-    }
+      },
+    );
+  });
+
+  it("lands Menu by first(), else past the text boxes, and keeps a box's keyboard down until OK", async () => {
+    await withPage(
+      `<canvas id="view" width="320" height="180"></canvas>
+<div id="card">
+  <input id="find" type="search" placeholder="Search">
+  <a href="#doors" id="doors">Doors</a>
+  <form id="join"><input id="room" inputmode="text" autocomplete="off"><button id="go">Join</button></form>
+  <div id="book"><button id="putBack">Put back</button><button id="next">Next page</button></div>
+</div>
+<script type="module">
+  import { Remote } from './tv.js';
+  const log = (window.log = []);
+  const room = document.getElementById('room');
+  document.getElementById('join').addEventListener('submit', (e) => {
+    e.preventDefault();
+    log.push('submit ' + room.value);
+  });
+  room.addEventListener('focus', () => log.push('focus'));
+  room.addEventListener('blur', () => log.push('blur'));
+  window.reading = true;
+  const remote = new Remote({
+    root: document.getElementById('card'),
+    view: document.getElementById('view'),
+    use: () => {},
+    first: () => (window.reading ? document.getElementById('book') : null),
+  });
+  remote.answerApp(true);
+  window.ready = true;
+</script>`,
+      async ({ js, key, ok, at, mode }) => {
+        assert.equal(await js('window.hallwayTV.menu()'), true);
+        assert.equal(await at(), 'putBack', "first(): the book's first button");
+        assert.equal(await js('window.hallwayTV.back()'), true);
+        await js("window.reading = false; document.getElementById('book').hidden = true");
+        assert.equal(await js('window.hallwayTV.menu()'), true);
+        assert.equal(await at(), 'doors', 'the control left is gone and first() gives none: past the search box');
+        assert.equal(await mode('find'), null, 'never stepped onto');
+
+        await key('ArrowUp', 'ArrowUp');
+        assert.equal(await at(), 'find');
+        assert.equal(await mode('find'), 'none');
+        await key('ArrowDown', 'ArrowDown');
+        await key('ArrowDown', 'ArrowDown');
+        assert.equal(await at(), 'room');
+        assert.deepEqual([await mode('find'), await mode('room')], [null, 'none'], 'its own back, and the next held');
+
+        await ok();
+        assert.equal(await at(), 'room');
+        assert.equal(await mode('room'), 'text', 'its own inputmode, for the keyboard');
+        assert.deepEqual(await js('window.log'), ['focus', 'blur', 'focus'], 'the focus given again, and no submit');
+        await js("document.getElementById('room').value = 'k3vd-q8hn'");
+        await ok();
+        assert.deepEqual(await js('window.log.slice(3)'), ['submit k3vd-q8hn'], "the next OK is the box's own");
+
+        assert.equal(await js('window.hallwayTV.back()'), true);
+        assert.equal(await at(), 'view');
+        assert.equal(await mode('room'), 'text');
+        assert.equal(await js('window.hallwayTV.menu()'), true);
+        assert.equal(await at(), 'room', 'back to the box');
+        assert.equal(await mode('room'), 'none', 'held again');
+        await key('ArrowDown', 'ArrowDown');
+        assert.equal(await at(), 'go');
+        assert.equal(await mode('room'), 'text');
+      },
+    );
   });
 });

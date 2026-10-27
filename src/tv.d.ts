@@ -63,16 +63,21 @@ export const SPARE_KEYS: Readonly<{
  * @property {() => boolean} [step] Back while walking: the site's own step back (put a book back,
  *   stand up, close a text view); true when it took one. One the page's history has an entry for
  *   (BackHistory's book) is the app's back, not a step
+ * @property {() => Element | null | undefined} [first] where Menu goes when there is no control to
+ *   come back to: a stop, or a part of the card holding one (its first); else, or when it gives
+ *   none, the card's first stop that isn't a text box
  */
 /** The remote's keys, and the card's focus. */
 export class Remote {
     /** @param {RemoteOptions} o */
-    constructor({ root, view, use, step }: RemoteOptions);
+    constructor({ root, view, use, step, first }: RemoteOptions);
     root: HTMLElement;
     view: HTMLElement;
     use: () => void;
     /** Back while walking: the site's own step back; true when it took one. */
     step: () => boolean;
+    /** Where Menu goes with no control to come back to: a stop, or a part of the card holding one. */
+    first: () => Element | null | undefined;
     /** @type {(inCard: boolean) => void} when the focus goes into the card, or back to walking */
     onMode: (inCard: boolean) => void;
     /**
@@ -87,6 +92,13 @@ export class Remote {
      * @type {Event | null}
      */
     private _kept;
+    /**
+     * The text box the remote stepped onto, its keyboard kept down (inputmode="none"), and the
+     * box's own inputmode, given back on OK or when the focus leaves it.
+     * @private
+     * @type {{ el: HTMLElement, mode: string | null } | null}
+     */
+    private _held;
     /** Whether the focus is in the card, not on the view or nowhere. */
     get inCard(): boolean;
     /**
@@ -104,7 +116,7 @@ export class Remote {
     padBack(): void;
     /** The focus to the view: walking. */
     walk(): void;
-    /** The focus into the card: the control last left there, else its first. */
+    /** The focus into the card: the control last left there, else first(), else its first stop that isn't a text box. */
     toCard(): void;
     /**
      * Answers the app (README, "The TV app"): in TV mode, window.hallwayTV = { menu, back }, which the
@@ -119,6 +131,26 @@ export class Remote {
      * @returns {HTMLElement[]}
      */
     private _stops;
+    /**
+     * Where Menu goes with no control to come back to: first()'s stop (itself, the first inside it,
+     * or its choice's), else the first stop that isn't a text box, else the first.
+     * @private
+     * @param {HTMLElement[]} stops
+     * @returns {HTMLElement | undefined}
+     */
+    private _firstStop;
+    /**
+     * The focus to a stop, as the remote moves it. A text box keeps the TV's keyboard down
+     * (inputmode="none") until OK on it: the keyboard would take the arrows.
+     * @private
+     * @param {HTMLElement} el
+     */
+    private _focus;
+    /**
+     * The held text box's own inputmode back.
+     * @private
+     */
+    private _release;
     /**
      * @private
      * @param {KeyboardEvent} e
@@ -145,4 +177,10 @@ export type RemoteOptions = {
      * (BackHistory's book) is the app's back, not a step
      */
     step?: (() => boolean) | undefined;
+    /**
+     * where Menu goes when there is no control to
+     * come back to: a stop, or a part of the card holding one (its first); else, or when it gives
+     * none, the card's first stop that isn't a text box
+     */
+    first?: (() => Element | null | undefined) | undefined;
 };

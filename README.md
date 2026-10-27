@@ -225,6 +225,20 @@ means the page used the key: the focus came out of the card to walking, or the s
 of its own. A page without `window.hallwayTV` gets the plain Back. A `Remote` puts `{ menu, back }`
 there with `answerApp()`, in TV mode only.
 
+**Where Menu lands.** Menu goes back to the control last left in the card. When there is none, it
+goes where the site's `first()` says: what the visitor is doing, such as outside's book buttons while
+reading. Without `first()`, Menu goes to the card's first stop that isn't a text box: the doors, not
+vrlbry's search box. Only a card of text boxes alone starts on one.
+
+**Text boxes and the TV's keyboard.** On the TV, a text box raises the on-screen keyboard as soon
+as it has the focus, and the keyboard takes the arrows until Back hides it. So when the remote
+steps onto a text box, by Menu or by ↑ and ↓ in the card, it keeps the keyboard down: the box
+has `inputmode="none"` while the focus is on it. OK on the box brings the keyboard up: the box gets
+its own `inputmode` back and the focus again. That OK isn't the form's Enter; the next one, from the
+keyboard or the remote, is. A box the site focuses itself, such as a search opened by a key of its
+own, is left as it is. In a browser at `?tv=emulate` the attribute shows this. On the TV, the
+keyboard itself does.
+
 **Back and the page's history.** The app's back a page is the WebView's, through the page's
 history. So an entry the page pushed is a page to go back through first: BackHistory's book, and
 each link followed in it, are put away and gone back through by the app's own Back, through
@@ -275,17 +289,24 @@ What a site does to work with the remote, from what the hallway does:
 3. **A `Remote`** over the page's card (`root`) and its canvas (`view`), with `use` as the
    gamepad's A at the middle of the view. The aim dot shows while walking in TV mode
    (`!remote.inCard`), with or without a pad.
-4. **`window.hallwayTV`** through the module (`remote.answerApp()`), with `step` for the site's
+4. **Where Menu lands**: `first` for what the visitor is doing, when there is no control to come
+   back to (the book's buttons while reading). Without it, Menu passes over the text boxes to the
+   card's first other stop.
+5. **Text boxes**: the remote keeps their keyboard down while stepping and brings it up on OK,
+   so the site sets no `inputmode="none"` of its own on them. Check on the TV that the keyboard
+   stays down while the remote steps onto a box and past it, and comes up on OK.
+6. **`window.hallwayTV`** through the module (`remote.answerApp()`), with `step` for the site's
    own Back.
-5. **Keys** read through `keyOf(e)`.
-6. **Whatever needs a letter key, the mouse or the wheel** (a 3D panel, a shortcut such as T) is
+7. **Keys** read through `keyOf(e)`.
+8. **Whatever needs a letter key, the mouse or the wheel** (a 3D panel, a shortcut such as T) is
    also a control in the card.
-7. **In a shared session**, the invite link shows as text to type elsewhere, with no Copy.
-8. **No controls that open a local file.**
-9. **The frame rate**, measured on the TV with HallwayApp's `tools/tv-check.mjs --url` (a debug
-   build). Lower the pixel ratio until the page holds 60 fps at 1080p; the hallway holds it at 2.
-10. **Testing in a browser**: `?tv=emulate`, with `remote.menu()` standing in for Menu (or
-    `hallwayTV.menu()` in the console). In the card, Escape stands in for Back.
+9. **In a shared session**, the invite link shows as text to type elsewhere, with no Copy.
+10. **No controls that open a local file.**
+11. **The frame rate**, measured on the TV with HallwayApp's `tools/tv-check.mjs --url` (a debug
+    build). Lower the pixel ratio until the page holds 60 fps at 1080p; the hallway holds it at 2.
+12. **Testing in a browser**: `?tv=emulate`, with `remote.menu()` standing in for Menu (or
+    `hallwayTV.menu()` in the console). In the card, Escape stands in for Back, and a text box
+    the remote is on shows `inputmode="none"` until OK.
 
 ## The modules
 
@@ -632,10 +653,10 @@ are the site's. In the card, the remote moves the focus from control to control.
 
 | Key | Walking | In the card |
 |---|---|---|
-| ↑ ↓ | the site's (walk) | from control to control; a radio group is one stop, at its checked option |
+| ↑ ↓ | the site's (walk) | from control to control; a radio group is one stop, at its checked option; a text box's keyboard kept down |
 | ← → | the site's (turn) | through a choice (a radio group, a select), each option chosen as it is reached; elsewhere nothing |
-| OK (Enter) | `use()` | ticks a checkbox or a radio, opens a select's list; a link or a button as its own |
-| Menu (`menu()`) | into the card, to the control last left there | walking again |
+| OK (Enter) | `use()` | ticks a checkbox or a radio, opens a select's list, brings up a text box's keyboard; a link or a button as its own |
+| Menu (`menu()`) | into the card: to the control last left there, else `first()`'s, else the first stop that isn't a text box | walking again |
 | Back (`back()`) | `step()`: true when it took one, else the app's | walking again |
 | Escape | the site's | walking again |
 
@@ -652,6 +673,12 @@ or inside the card; the site's walking listener on the window doesn't get them):
 When the focus falls from the card to nowhere (a control blurs itself, as vrlbry's search does on
 Escape, or goes), the remote walks again, and Menu comes back to that control.
 
+A text box the remote steps onto has `inputmode="none"` until OK on it, and its own `inputmode`
+back then, or as soon as the focus leaves it ([The TV app](#the-tv-app), "Text boxes and the TV's
+keyboard"). `first()` may give a stop, or a part of the card holding stops (its first), or an
+option of a choice (the choice's stop). What isn't a stop (hidden, disabled, outside the card)
+counts as none.
+
 ```js
 import { Remote, keyOf, tvMode } from 'common/tv.js';
 
@@ -664,6 +691,7 @@ if (tv) {
     view: renderer.domElement,              // the 3D view, which holds the focus while walking
     use: () => controls.useMiddle(),        // OK: the gamepad's A at the middle of the view
     step,                                   // the site's own Back ("Back and the page's history")
+    first: () => (reading ? book.buttons : null),   // where Menu lands with nothing to come back to
   });
   remote.onMode = (inCard) => overlay.setHint(inCard ? 'tv-card' : 'tv');
   remote.answerApp(tv);                     // window.hallwayTV = { menu, back }
@@ -682,7 +710,7 @@ controls.onPadBack = () => remote?.padBack();
 | `keyOf(e)` | `e.code \|\| e.key`, with the spare keys as the arrows: `ChannelUp` and `ChannelDown` as `ArrowUp` and `ArrowDown`, `MediaRewind` and `MediaFastForward` as `ArrowLeft` and `ArrowRight` (`SPARE_KEYS`). Play and pause, stop, next and the rest are as they are. |
 | `keepsKey(el, key)` | Whether the focused control keeps the key, as above. |
 | `focusStops(items)`, `nextStop(n, at, dir)` | The card's stops, a radio group one, and the next stop, staying at the ends. |
-| `new Remote({ root, view, use, step? })` | Takes the keys before the site's listeners (the window's capture). |
+| `new Remote({ root, view, use, step?, first? })` | Takes the keys before the site's listeners (the window's capture). |
 | `menu()`, `back()` | What the app calls. `menu()` is always true. `back()` is true in the card, else `step()`'s answer when it is `true`. |
 | `padBack()` | A gamepad's B: as `back()`, else back a page when there is one (a page can't leave the app). |
 | `walk()`, `toCard()`, `inCard`, `onMode(inCard)` | The focus to the view or into the card, which has it, and a callback as it moves. |
@@ -699,7 +727,7 @@ Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.6.0",
+  "common": "github:AriaMoKr/common#v0.6.1",
   "three": "0.186.1"
 }
 ```
@@ -709,8 +737,8 @@ README. It has no dependencies of its own and runs nothing on install. three is 
 (`>=0.154.0`): `portal.js`, `fade.js`, `sky.js` and `access.js` use the site's own, so a page has
 one three. In Node the modules import as `common/door.js` and so on, for a site's tests, and the
 tools as `common/tools/serve.mjs` and so on. To take a new version, move the tag in package.json
-and run `npm install`. Each version so far only adds: v0.6.0 leaves the modules of v0.1.0 to v0.5.0
-as they were.
+and run `npm install`. Each version so far only adds. v0.6.1 changes only the remote in the card
+(its text boxes, and where Menu lands), and leaves the modules of v0.1.0 to v0.5.0 as they were.
 
 The sites load it in the browser in three ways, as they load layersharedsession.
 
@@ -946,14 +974,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.0
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.1
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.0
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.1
     with:
       build: npm run build
       path: dist
@@ -1050,17 +1078,20 @@ what changes for each when it takes common's in their place:
   - *Node 24*: their own `pages.yml` stays (it builds the pages and the indexes), with
     `node-version: 24`.
 
-**The TV app (v0.6.0).** Only the hallway has a TV view so far. The others take the module and
-[the checklist](#a-site-in-the-app) in a change of their own:
+**The TV app (v0.6.0, v0.6.1).** Only the hallway has a TV view so far. The others take the module
+and [the checklist](#a-site-in-the-app) in a change of their own:
 
 - **hallway** (`public/js/tv.js`): it keeps `roomFromInput`, for its Join form, and takes `isTV`,
   `focusStops`, `nextStop` and `Remote` from common's. `main.js`'s `tv` becomes `tvMode()`, and
   its `window.hallwayTV = { … }` becomes `remote.answerApp(tv)`. Its card gains no step: walking,
   Back is the app's. `controls.js`'s `KEYS[e.code || e.key]` becomes `KEYS[keyOf(e)]`, which adds
-  the spare keys. `test/tv.test.js` keeps the `roomFromInput` and style cases.
+  the spare keys. `test/tv.test.js` keeps the `roomFromInput` and style cases. Menu lands on the
+  doors toggle as before; with v0.6.1 its name and Join boxes keep the keyboard down until OK.
 - **vrlbry, music, outside and breadboard**: HallwayApp's README, "Behind the doors", lists what the
   remote can't reach on each today. Each one's `step` is its own: putting a book back where its
-  entry isn't the app's, closing a text view, standing up from outside's bench.
+  entry isn't the app's, closing a text view, standing up from outside's bench. So is each one's
+  `first`: outside's book buttons while reading, not "← Hallway". vrlbry's Menu passes over its
+  search box without one, and its search and ZIM address boxes keep the keyboard down until OK.
 
 ## Developing
 

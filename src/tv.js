@@ -2,8 +2,10 @@
 // agent ends with " HallwayTV/<version>" (tvMode; ?tv=emulate shows the TV's page in any browser),
 // walked with the TV's remote. Walking, the 3D view holds the focus, the arrows walk and turn (the
 // site's own keys, read through keyOf), and OK uses the middle of the view, as a gamepad's A does.
-// Menu moves the focus into the card, where up and down go from control to control (a choice one
-// stop), left and right through a choice, and OK ticks; Escape or Back walk again. A control that
+// Menu moves the focus into the card (to the control last left there, else first(), else its first
+// stop that isn't a text box), where up and down go from control to control (a choice one stop),
+// left and right through a choice, and OK ticks; Escape or Back walk again. A text box the remote
+// steps onto keeps the TV's keyboard down (inputmode="none") until OK on it. A control that
 // uses the arrows itself keeps them: an open combobox up and down (and Escape, as Back closes its
 // list first), a range left and right, a text box's caret left and right until it is at an end.
 // Walking, Back is the site's own step back (step), if any. The app asks the page what Back and
@@ -58,6 +60,12 @@ export function keyOf(e) {
 const keyName = (e) => spare(e.key ?? '') ?? spare(e.code ?? '') ?? e.key ?? '';
 
 const TYPED = new Set(['text', 'search', 'url', 'email', 'number', 'password', 'tel', 'textarea']);
+
+/**
+ * Whether this is a text box, whose focus raises the TV's keyboard.
+ * @param {Element | null | undefined} el
+ */
+const typed = (el) => !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && TYPED.has(/** @type {HTMLInputElement} */ (el).type);
 
 /**
  * Whether the focused control uses this key itself, so the card leaves it to it: an open combobox
@@ -144,17 +152,22 @@ const send = (el, key) => el.dispatchEvent(new KeyboardEvent('keydown', { key, c
  * @property {() => boolean} [step] Back while walking: the site's own step back (put a book back,
  *   stand up, close a text view); true when it took one. One the page's history has an entry for
  *   (BackHistory's book) is the app's back, not a step
+ * @property {() => Element | null | undefined} [first] where Menu goes when there is no control to
+ *   come back to: a stop, or a part of the card holding one (its first); else, or when it gives
+ *   none, the card's first stop that isn't a text box
  */
 
 /** The remote's keys, and the card's focus. */
 export class Remote {
   /** @param {RemoteOptions} o */
-  constructor({ root, view, use, step = () => false }) {
+  constructor({ root, view, use, step = () => false, first = () => null }) {
     this.root = root;
     this.view = view;
     this.use = use;
     /** Back while walking: the site's own step back; true when it took one. */
     this.step = step;
+    /** Where Menu goes with no control to come back to: a stop, or a part of the card holding one. */
+    this.first = first;
     /** @type {(inCard: boolean) => void} when the focus goes into the card, or back to walking */
     this.onMode = () => {};
     /**
@@ -169,6 +182,13 @@ export class Remote {
      * @type {Event | null}
      */
     this._kept = null;
+    /**
+     * The text box the remote stepped onto, its keyboard kept down (inputmode="none"), and the
+     * box's own inputmode, given back on OK or when the focus leaves it.
+     * @private
+     * @type {{ el: HTMLElement, mode: string | null } | null}
+     */
+    this._held = null;
     view.tabIndex = 0;
     // Before the site's own listeners, which walk with the arrows: in the card they move the focus.
     addEventListener('keydown', (e) => this._key(e), true);
@@ -179,6 +199,7 @@ export class Remote {
     // The focus fallen from the card to nowhere (a control blurred by its own key, or gone): walking.
     root.addEventListener('focusout', (e) => {
       const from = /** @type {HTMLElement} */ (e.target);
+      if (from === this._held?.el) this._release();
       if (e.relatedTarget || from === view) return;
       queueMicrotask(() => {
         if (document.activeElement && document.activeElement !== document.body) return;
@@ -235,11 +256,11 @@ export class Remote {
     this.onMode(false);
   }
 
-  /** The focus into the card: the control last left there, else its first. */
+  /** The focus into the card: the control last left there, else first(), else its first stop that isn't a text box. */
   toCard() {
     const stops = this._stops();
-    const to = this._last && stops.includes(this._last) ? this._last : stops[0];
-    to?.focus();
+    const to = this._last && stops.includes(this._last) ? this._last : this._firstStop(stops);
+    if (to) this._focus(to);
     if (this.inCard) this.onMode(true);
   }
 
@@ -263,6 +284,46 @@ export class Remote {
   _stops() {
     const els = /** @type {HTMLInputElement[]} */ (Array.from(this.root.querySelectorAll(FOCUSABLE))).filter((e) => e !== this.view && !e.disabled && shown(e));
     return focusStops(els.map((e) => ({ radio: e.type === 'radio' ? e.name : '', checked: e.checked }))).map((i) => els[i]);
+  }
+
+  /**
+   * Where Menu goes with no control to come back to: first()'s stop (itself, the first inside it,
+   * or its choice's), else the first stop that isn't a text box, else the first.
+   * @private
+   * @param {HTMLElement[]} stops
+   * @returns {HTMLElement | undefined}
+   */
+  _firstStop(stops) {
+    const f = /** @type {HTMLInputElement | null | undefined} */ (this.first());
+    const choice = (/** @type {HTMLInputElement} */ s) => f?.type === 'radio' && s.type === 'radio' && s.name === f.name;
+    return (f && stops.find((s) => f.contains(s) || choice(/** @type {HTMLInputElement} */ (s)))) || stops.find((s) => !typed(s)) || stops[0];
+  }
+
+  /**
+   * The focus to a stop, as the remote moves it. A text box keeps the TV's keyboard down
+   * (inputmode="none") until OK on it: the keyboard would take the arrows.
+   * @private
+   * @param {HTMLElement} el
+   */
+  _focus(el) {
+    if (typed(el) && el !== document.activeElement) {
+      this._release();
+      this._held = { el, mode: el.getAttribute('inputmode') };
+      el.setAttribute('inputmode', 'none');
+    }
+    el.focus();
+  }
+
+  /**
+   * The held text box's own inputmode back.
+   * @private
+   */
+  _release() {
+    const held = this._held;
+    if (!held) return;
+    this._held = null;
+    if (held.mode === null) held.el.removeAttribute('inputmode');
+    else held.el.setAttribute('inputmode', held.mode);
   }
 
   /**
@@ -319,7 +380,8 @@ export class Remote {
         done();
         const stops = /** @type {HTMLInputElement[]} */ (this._stops());
         const at = stops.findIndex((s) => s === a || (a.type === 'radio' && s.type === 'radio' && s.name === a.name));
-        stops[nextStop(stops.length, at, key === 'ArrowUp' ? -1 : 1)]?.focus();
+        const to = stops[nextStop(stops.length, at, key === 'ArrowUp' ? -1 : 1)];
+        if (to) this._focus(to);
         return;
       }
       case 'ArrowLeft':
@@ -358,6 +420,13 @@ export class Remote {
           } catch {
             /* no picker here: left and right choose */
           }
+        } else if (a === this._held?.el) {
+          // OK on a text box stepped onto: its keyboard up, with its own inputmode and the focus
+          // given again (not the form's Enter). The next OK is the keyboard's, or the box's own.
+          done();
+          this._release();
+          a.blur();
+          a.focus({ preventScroll: true });
         }
         return;
     }

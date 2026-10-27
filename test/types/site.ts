@@ -109,6 +109,8 @@ const remoteOptions: RemoteOptions = {
   use: () => {},
   // A book with its entry in the page's history is the app's back; a text view open is a step.
   step: () => backHistory.level === 0 && reading && !(reading = false),
+  // While reading, Menu goes to the book's buttons.
+  first: () => (reading ? document.querySelector('.book-buttons') : null),
 };
 const remote = new Remote(remoteOptions);
 remote.onMode = (inCard) => document.body.classList.toggle('in-card', inCard);
@@ -126,6 +128,8 @@ const next: number = nextStop(stops.length, -1, 1);
 
 // @ts-expect-error the step says whether it took one
 new Remote({ ...remoteOptions, step: () => {} });
+// @ts-expect-error Menu's first stop is an element
+new Remote({ ...remoteOptions, first: () => 'book' });
 // @ts-expect-error OK while walking is the site's
 new Remote({ root: document.body, view: remoteOptions.view });
 // @ts-expect-error the spare keys stay as they are
