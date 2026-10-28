@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { HALLWAY_ID, LINK_PARAMS, VISIT_PARAMS, doorLink, hallwayViews, readVisit, wayBack, withoutVisit } from '../src/door.js';
+import { HALLWAY_ID, LINK_PARAMS, VISIT_PARAMS, doorLink, hallLink, hallwayViews, leaveUrl, readVisit, wayBack, withoutVisit } from '../src/door.js';
 
 /** The Hallway's doorways (its layout.js HALL). */
 const HALL = { doorWidth: 1.1, doorHeight: 2.25 };
@@ -85,5 +85,35 @@ describe('a door\'s link, read by the place behind it', () => {
 
   it('takes off all a door adds but the room', () => {
     assert.deepEqual(LINK_PARAMS.filter((k) => !VISIT_PARAMS.includes(k)), ['room']);
+  });
+});
+
+describe('another hall\'s link (hallLink)', () => {
+  const art = 'https://ariamokr.github.io/art/?tv=emulate#x';
+  const studio = { id: 'studio', url: 'https://ariamokr.github.io/vartiste/?load=gallery%2Fpaper.vartistez#y' };
+
+  it('keeps the place\'s address and adds the way back, named, and the room', () => {
+    const url = new URL(hallLink(studio, { here: art, name: 'art', room: 'k3vd-q8hn' }));
+    assert.equal(url.origin + url.pathname, 'https://ariamokr.github.io/vartiste/');
+    assert.equal(url.hash, '#y');
+    assert.deepEqual([...url.searchParams.keys()], ['load', 'back', 'backname', 'room']);
+    assert.equal(url.searchParams.get('back'), 'https://ariamokr.github.io/art/?from=studio&room=k3vd-q8hn');
+    assert.equal(url.searchParams.get('backname'), 'art');
+    assert.equal(hallLink(studio, { here: art, name: 'art' }),
+      'https://ariamokr.github.io/vartiste/?load=gallery%2Fpaper.vartistez&back=https%3A%2F%2Fariamokr.github.io%2Fart%2F%3Ffrom%3Dstudio&backname=art#y');
+  });
+
+  it('is read by the place as a way back to the hall, by its name, never the Hallway', () => {
+    const link = new URL(hallLink(studio, { here: art, name: 'art', room: 'k3vd-q8hn' }));
+    const way = wayBack(link.search, 'vartiste', { origin: link.origin, always: false });
+    assert.ok(way);
+    assert.deepEqual([way.url, way.label, way.name, way.hallway], ['https://ariamokr.github.io/art/?from=studio&room=k3vd-q8hn', '← art', 'art', false]);
+    assert.equal(hallwayViews(way, 'vartiste'), null);
+    assert.equal(leaveUrl(way, null), 'https://ariamokr.github.io/art/?from=studio');
+    assert.equal(withoutVisit(link.href), '/vartiste/?load=gallery%2Fpaper.vartistez&room=k3vd-q8hn#y');
+    // Between two dev servers too: only from=hallway makes a way back on this machine the Hallway.
+    const local = new URL(hallLink({ ...studio, url: 'http://localhost:7979/' }, { here: 'http://localhost:8096/', name: 'art' }));
+    assert.equal(wayBack(local.search, 'vartiste', { origin: local.origin })?.hallway, false);
+    assert.equal(readVisit(local.search).from, null);
   });
 });

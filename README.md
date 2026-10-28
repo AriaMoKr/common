@@ -124,6 +124,16 @@ The way back then says "← " and the name, shortened past 24 characters, and it
 name and the host. The name is put on one line, without control characters or characters that
 change the text's direction. Without `backname` the host stands in.
 
+`hallLink` makes that link (since v0.6.3): `back` is the hall's own address with `?from=` and the
+door's id there, so the hall can bring the visitor back out in front of that door, and in a
+shared session both the link and `back` carry its `room`. It never says `from=hallway`, so the
+place doesn't take the way back for the Hallway's, even between two dev servers. art's door into
+VARTISTE, for one:
+
+```
+https://ariamokr.github.io/vartiste/?back=https%3A%2F%2Fariamokr.github.io%2Fart%2F%3Ffrom%3Dstudio&backname=art
+```
+
 **Staying in VR across the trip.** When a page navigates during an immersive session, Quest
 Browser can grant the next page a session without a click: it fires `sessiongranted` on
 `navigator.xr`. The Hallway listens for it, so a visitor who walks back in from an environment's
@@ -345,6 +355,7 @@ if (views) {
 | `hallwayViews(way, id)` | `{ views, id }`: views.json's address and the door's id there, or null when the way back is not the Hallway. |
 | `viewParams(entry)` | An entry of views.json, `{ image, depth, pictureHeight, eye, horizon, aspect }`, or null when it isn't sensible. |
 | `doorLink(env, { here, hall, pose, xr, room })` | The Hallway's side: the link the door `env` (`{ id, url, color }`) opens, from the Hallway at `here`, with doorways `hall` (`{ doorWidth, doorHeight }`) and the visitor's `pose` (`{ across, yaw, pitch }`, the Hallway's `doorPose`). |
+| `hallLink(env, { here, name, room })` | Another hall's side (since v0.6.3): the link its door `env` (`{ id, url }`) opens, from the hall at `here`, which calls itself `name` on the way back. |
 
 The types `Visit`, `WayBack`, `ViewParams` and `DoorPose` are in `door.d.ts`.
 
@@ -732,7 +743,7 @@ Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.6.2",
+  "common": "github:AriaMoKr/common#v0.6.3",
   "three": "0.186.1"
 }
 ```
@@ -744,7 +755,8 @@ one three. In Node the modules import as `common/door.js` and so on, for a site'
 tools as `common/tools/serve.mjs` and so on. To take a new version, move the tag in package.json
 and run `npm install`. Each version so far only adds. v0.6.1 changes only the remote in the card
 (its text boxes, and where Menu lands), v0.6.2 adds its `forget()`, and both leave the modules of
-v0.1.0 to v0.5.0 as they were.
+v0.1.0 to v0.5.0 as they were. v0.6.3 adds `hallLink` to `door.js`, for a hall other than the
+Hallway.
 
 The sites load it in the browser in three ways, as they load layersharedsession.
 
@@ -980,14 +992,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.2
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.3
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.2
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.3
     with:
       build: npm run build
       path: dist

@@ -104,6 +104,25 @@ export function doorLink(env: {
     xr?: boolean | undefined;
     room?: string | null | undefined;
 }): string;
+/**
+ * The address a door of another hall opens (README, "Another hall"): the place's url with `back`,
+ * the hall's own address with ?from=<env.id>, and `backname`, the hall's name for itself, which
+ * the way back there shows. No `from=hallway`, so the way back is never taken for the Hallway.
+ * @param {{ id: string, url: string }} env the door: its id in the hall, and the place's address
+ * @param {object} o
+ * @param {string} o.here the hall's address: the way back is it with ?from=<env.id>
+ * @param {string} o.name the hall's name for itself, on the way back's button there
+ * @param {string | null} [o.room] the shared session the visitor is in: the place's link and the
+ *   way back both carry it, so the visitor comes back into it
+ */
+export function hallLink(env: {
+    id: string;
+    url: string;
+}, { here, name, room }: {
+    here: string;
+    name: string;
+    room?: string | null | undefined;
+}): string;
 /** The Hallway's id in `from`. */
 export const HALLWAY_ID: "hallway";
 /** The Hallway. In front of an environment's door it is this with ?from=<the door's id> (hallwayUrl). */

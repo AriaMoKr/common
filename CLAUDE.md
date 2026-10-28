@@ -7,9 +7,9 @@ Guidance for Claude Code in this repository.
 A small library shared by the sites behind the Hallway (https://ariamokr.github.io/hallway/,
 AriaMoKr/hallway): hallway itself, vrlbry, music, breadboard and outside. Plain ES modules in
 `src/` with JSDoc, no build step, no dependencies of its own; three is a peer dependency. It holds
-the Hallway's door contract, `door.js` (a door's link, the way back, the view from the door, and
-`doorLink`, the Hallway's side) and `nav.js` (the VR movement choice in `localStorage` under
-`hallway.nav`), and since 0.2.0 the three.js pieces the sites share: `portal.js` (a room seen
+the Hallway's door contract, `door.js` (a door's link, the way back, the view from the door,
+`doorLink`, the Hallway's side, and since 0.6.3 `hallLink`, another hall's) and `nav.js` (the VR
+movement choice in `localStorage` under `hallway.nav`), and since 0.2.0 the three.js pieces the sites share: `portal.js` (a room seen
 through an opening, "interior mapping"), `fade.js` (the fade to and from black) and `gamepad.js`
 (standard-layout gamepads), since 0.3.0 `sky.js` (outside's late afternoon, for every window
 behind every door), since 0.4.0 `access.js` (accessibility settings in `localStorage` under
@@ -23,7 +23,7 @@ yaw, what each accessibility setting means and how a site wires it in, "The TV a
 agent, `window.hallwayTV`, Back and the page's history, and the checklist for a site in the app),
 how each site loads the package, the tools (with why Chrome's profile gets its Local State) and the workflow's caller.
 
-The sites install it from GitHub at a tag (`github:AriaMoKr/common#v0.6.2`) and load it in three
+The sites install it from GitHub at a tag (`github:AriaMoKr/common#v0.6.3`) and load it in three
 ways: a vendor copy and an import map (hallway, outside: `tools/vendor.mjs`), `server/vendor.js`
 (vrlbry, music), and Vite (breadboard, TypeScript). Every site takes the modules of 0.1.0 to 0.4.0
 from here (vrlbry and music keep their own gamepad reader, on `stick` and the rest; breadboard has
@@ -52,7 +52,7 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
 
 - `src/door.js`: pure. `readVisit` (the visit, each value in range or null), `wayBack` (where the
   way back leads and what it is called: `{ url, label, title, name, host, hallway }`), `keptWay`,
-  `withoutVisit`, `leaveUrl`, `hallwayViews`, `viewParams`, and `doorLink`. Constants:
+  `withoutVisit`, `leaveUrl`, `hallwayViews`, `viewParams`, `doorLink`, and `hallLink` (another hall's link: `back` with `?from=` the door, `backname`, `room`; never `from=hallway`). Constants:
   `HALLWAY_ID`, `HALLWAY_URL` (no `from`: `hallwayUrl(id)` adds it), `VISIT_PARAMS` (taken off the
   address; includes `backname`), `LINK_PARAMS` (what the Hallway's doors add, in order).
 - `src/nav.js`: `NAV_KEY`, `NAV_DEFAULTS` (frozen), `normalizeNav`, `loadNav(storage?, defaults?)`,
