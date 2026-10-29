@@ -20,11 +20,14 @@ environment and how the environment leads them back, and the three.js pieces the
   links followed in it and then putting it away.
 - **[`tv.js`](src/tv.js)**: the remote of the Hallway's Android TV app, and the page's answer to the
   app's Back and Menu.
+- **[`controls.js`](src/controls.js)**: walking about a site with a mouse, a finger, a gamepad, a
+  TV's remote or a headset, for each site's own controls to extend with its room.
 
 These are plain ES modules with JSDoc, with no build step. They run in the browser and in Node,
-for the sites' tests. `portal.js`, `fade.js`, `sky.js` and `access.js` import three by its bare
-name, from the site (a peer dependency, r154 or later); the others import nothing. A `.d.ts` beside
-each module gives TypeScript sites their types.
+for the sites' tests. `portal.js`, `fade.js`, `sky.js`, `access.js` and `controls.js` import three
+by its bare name, from the site (a peer dependency, r154 or later). `controls.js` also imports
+`gamepad.js` and `tv.js` from beside it, and the others import nothing. A `.d.ts` beside each
+module gives TypeScript sites their types.
 
 Beside them are the tools the sites' Node scripts run, never served to a page, and the workflow
 that publishes them:
@@ -39,8 +42,8 @@ that publishes them:
   workflow, for each site's own to call.
 
 Every site takes what v0.1.0 to v0.4.0 brought from here (breadboard has no sky). The modules,
-tools and workflow of v0.5.0, and the TV module of v0.6.0, come to each site in a change of its
-own (see [Coming from a site's own copy](#coming-from-a-sites-own-copy)).
+tools and workflow of v0.5.0, the TV module of v0.6.0 and the walking controls of v0.7.0 come to
+each site in a change of its own (see [Coming from a site's own copy](#coming-from-a-sites-own-copy)).
 [The TV app](#the-tv-app) says what a site in the TV app does.
 
 ## Going in
@@ -737,26 +740,182 @@ too, stepping a range or moving a caret itself and sending an open combobox the 
 `RemoteOptions` is in `tv.d.ts`. The hallway's own Join form (`roomFromInput`) stays in the
 hallway: it needs layersharedsession's `isRoom`.
 
+### `controls.js`
+
+Walking about a site, on every device: the template's `public/js/controls.js`
+([RoomTemplateEmpty](https://github.com/AriaMoKr/RoomTemplateEmpty) at `f3e1c91`), call for call,
+with what is general in outside's. The visitor's body is the `rig` (yaw only), and the camera is
+its head: pitch on a screen, the headset's pose in VR. A site's own `Controls` extends it with its
+room.
+
+| | |
+|---|---|
+| Desktop | A drag looks; WASD or the arrows walk and turn (Shift runs, Q and E turn); a click uses what it is on. |
+| Phone | A finger drags the scene; a tap uses what it is on. Two fingers neither look nor tap: they are a pinch, for the site. |
+| Gamepad | It takes over when used, and the mouse takes it back (`padActive`, `onPadActive`, `hasPad`). The left stick walks (pressed in, it runs), the right one looks, A is `useMiddle()`, and B or Back is `onPadBack`. |
+| TV | The remote's arrows walk and turn, read through `keyOf` (its spare keys too). With `aimMiddle` the middle of the view is the pointer, and the site's `Remote` gives OK to `useMiddle()`. |
+| VR | Two hands (`hands`), each with a laser and a reticle. A trigger uses what its hand points at, and a grip is `onSqueeze`. The right stick turns (`turn`: `snap`, 30° a push, or `smooth`), and the left one walks the way the head faces or aims a teleport (`move`; `setNav`). Entering lines the headset up with where the visitor stood and looked; leaving carries on from the head. |
+
+What a click, a tap, A, OK or a trigger is on goes to `use(hit, how)`. Common's own takes the
+doorway (`onDoor(how, hit)`) and ground one may stand on (`walkable`): a walk there on a screen,
+a teleport in VR. A walk follows the site's `route` there and turns to its `face` on the way (on
+the last leg, when it goes along more than one point, looking where it goes before that). It calls
+`then` once there and turned. A wall, a key, a drag or the gamepad ends it, and then `then` isn't
+called. With `reduceMotion` it jumps to the end. The rig stands on the site's ground
+(`groundAt`), under the head in VR, `eyeLift` above it there (`setEyeLift`).
+
+A key is the page's, and neither the site's nor walking's, in these cases:
+
+- Ctrl, Meta or Alt is held.
+- A page control has used it already (`defaultPrevented`, such as the TV remote's OK).
+- It is in a form control, a `contenteditable` or an element with `data-own-keys` (a text view).
+- It is Space or Enter on a button or a link.
+
+The arrows that walk are prevented, so the page doesn't scroll and the TV's spatial navigation
+doesn't take them.
+
+```js
+import { Controls as Walking } from 'common/controls.js';
+import { EYE, castRay, clampWalk, panelButtonAt, pieceFront } from './room.js';
+
+/** The template's: its room, its control panel and the pictures on its walls. */
+export class Controls extends Walking {
+  constructor({ layout, ...options }) {
+    super({ ...options, eye: EYE, hit: () => ({ t: 0, kind: '', x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, u: 0, v: 0, walkable: false, piece: -1 }) });
+    this.layout = layout; // after super(): common's constructor calls none of the methods below
+    this.hoverPanel = null;
+    this.hoverPiece = -1;
+    this.onPanel = () => {};
+    this.onPiece = () => {};
+  }
+
+  castRay(ox, oy, oz, dx, dy, dz, out) {
+    return castRay(this.layout, ox, oy, oz, dx, dy, dz, out);
+  }
+
+  clampWalk(fx, fz, x, z, out) {
+    return clampWalk(this.layout, fx, fz, x, z, out);
+  }
+
+  usable(hit) {
+    if (hit?.kind === 'panel') return panelButtonAt(hit.u, hit.v);
+    return hit?.kind === 'piece' ? 'piece' : super.usable(hit);
+  }
+
+  use(hit, how) {
+    if (hit?.kind === 'panel') this._press(panelButtonAt(hit.u, hit.v));
+    else if (hit?.kind === 'piece') this.onPiece(hit.piece, how);
+    else super.use(hit, how);
+  }
+
+  _setHover(usable, hit) {
+    super._setHover(usable, hit);
+    this.hoverPanel = hit?.kind === 'panel' ? usable : null;
+    this.hoverPiece = usable === 'piece' ? hit.piece : -1;
+  }
+
+  reticleScale(use, hit) {
+    return use === 'piece' ? 1.3 : super.reticleScale(use, hit);
+  }
+
+  walkInto() { /* up to the doorway and through it: this._startWalk(points, Math.PI) */ }
+  walkUpTo(i, done = null) { /* pieceFront: this._teleport(…) in VR, else this._startWalk(…, done) */ }
+
+  _press(id) {
+    if (id) this.onPanel(id);
+  }
+}
+```
+
+**What a site gives it** are methods its subclass overrides. The room's data stays in the
+subclass, set after `super()`; common's constructor calls none of them.
+
+| Method | Common's | The site's |
+|---|---|---|
+| `castRay(ox, oy, oz, dx, dy, dz, out)` | meets nothing: null | What the ray meets first, written into `out` and returned, or null. Common reads `t`, `kind`, the point (`x`, `y`, `z`), the normal (`nx`, `ny`, `nz`, any length) and `walkable`; the rest is the site's. Of the kinds, common knows `'door'` (the doorway) and `'ceiling'` (no reticle). |
+| `clampWalk(fx, fz, x, z, out)` | no walls | The nearest place to (x, z) for one coming from (fx, fz), into `out`. |
+| `usable(hit)` | `'door'` on the doorway | What could be used there (a string), or null: `hover`, the cursor and the reticle. |
+| `use(hit, how)` | the doorway and `walkable` ground, above | Its own first, then `super.use(hit, how)`. A press that meets nothing comes as null. `how` is `'screen'` or `'xr'`. |
+| `_setHover(usable, hit)` | `hover`, and `hoverDoor` when it is the doorway | What else it shows of what is pointed at, after `super`. |
+| `walkInto()` | nothing | A walk up to its doorway and through it, with `_startWalk`. |
+| `stand()` | `false` | Gets up before a move (a walk, the keys, the gamepad, the stick, a teleport), and says whether it did. |
+| `groundAt(x, z)` | 0 | The ground's height there. |
+| `route(fx, fz, x, z)` | `[[x, z]]` | The points a walk goes through, the last where it ends; none to stay. |
+| `_riseXR()` | `eyeLift` | The rig's height above the ground in VR (video lowers it for a seat). |
+| `reticleScale(use, hit)` | 1.8 on the doorway, 0.7 on what else could be used, else 1 | Its own sizes. |
+
+Two options are the site's too: `eye`, the eye's height on a screen (1.6 m), and `hit`, a blank
+hit of the site's own shape for `castRay` to write into (one for the screen and one per hand).
+
+**Where a site's own comes first** are methods that take nothing in common. Each says whether the
+site took what it was given:
+
+| Method | When | Taken |
+|---|---|---|
+| `takeKey(e, name)` | A key (`keyOf`'s name), after the page's own, before walking's | Walking doesn't get it. |
+| `takePad(pad, dt, press)` | Each frame a gamepad is connected, before walking and A and B | The pad was used, so it takes over. Clearing `press.use` or `press.back` takes that press. |
+| `takeHand(hand, pad, ax, ay, dt)` | Each frame, for each hand with a stick in VR | The stick neither walks, turns nor aims a teleport this frame. |
+| `takeSwipe(dx, dy, ms, touch)` | A drag let go | The view goes back where the drag began. |
+| `takePinch(apart)` | Two fingers moved apart (or together) since the last one taken | The next is measured from here. |
+| `takeWheel(dy)` | The wheel on the view, in pixels | The page doesn't scroll. |
+| `takeGrip(hand, on)` | A grip squeezed or let go in VR | A squeeze isn't `onSqueeze`'s. |
+
+| Export | |
+|---|---|
+| `new Controls({ renderer, camera, rig, scene, dom, eye?, hit?, window?, getGamepads? })` | `renderer` for its `xr`, the camera in the rig, `scene` for the reticles, `dom` the canvas. `window` and `getGamepads` are the page's unless given (a test's). |
+| `update(dt)` | Each frame; nothing is allocated. |
+| `setPose(x, z, yaw, pitch = restPitch)` | Standing there, on the ground. |
+| `setNav({ move, turn })`, `setEyeLift(lift)` | VR's movement (`nav.js`), and the rig raised (`access.js` `eyeLift`), at once in VR and only there. |
+| `walkTo(x, z, { face?, then? })` | A walk, as above. |
+| `useMiddle()` | What the middle of the view is on, used as a click is: A, and the TV's OK. |
+| `KEYS` | What each key does, by `keyOf`'s name; frozen. |
+| `hover`, `hoverDoor`, `pointer` | What is pointed at that could be used, whether it is the doorway, and the mouse over the view in client pixels, or null. |
+| `padActive`, `hasPad`, `aimMiddle` | The gamepad used last, one connected, and the middle of the view as the pointer. |
+| `moveSpeed`, `turnRate` | The sticks' smooth walking and turning this frame in VR, for the vignette. |
+| `reduceMotion`, `eyeLift`, `restPitch`, `move`, `turn` | The settings. `restPitch` is where the view rests after a walk or `setPose` (outside's TV looks a little down). |
+| `hands` | `{ controller, laser, tip, reticle, source, hit, last, aiming }` each. |
+| `onDoor(how, hit)`, `onTeleport(move)`, `onSqueeze(hand)`, `onActivity()`, `onPadActive(on)`, `onPadBack()` | The site's callbacks. `onTeleport` blinks the view around `move()`, which puts the visitor there. |
+
+The members with an underscore that a subclass calls are `protected` in `controls.d.ts`, and as
+much the contract as the rest:
+
+- `_startWalk(points, face, done)`: a walk of the site's own, such as a doorway's or a picture's.
+- `_move(x, z)`: the rig, walled in.
+- `_moveHead(x, z)` and `_placeHead(x, z)`: the head, walled in or not.
+- `_teleport(x, z)`, `_turnAboutHead(angle)` and `_headYaw()`.
+- `_standOnGround(dt, x, z, lift)`.
+- `_lineUp()`: a moment after entering VR.
+- `_onSessionEnd()`.
+- `_pickNdc(x, y)` and `_pickScreen(clientX, clientY)`.
+
+The types `Hit`, `Hand`, `How`, `KeyAction`, `PadPress`, `Walk` and `ControlsOptions` are in
+`controls.d.ts`. In TypeScript, `Controls<H extends Hit>` takes a site's own hit:
+`class RoomControls extends Controls<RoomHit>`.
+
 ## Using it
 
 Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.6.3",
+  "common": "github:AriaMoKr/common#v0.7.0",
   "three": "0.186.1"
 }
 ```
 
 The package holds `src/` (the modules and their `.d.ts` files), `tools/`, the license and this
 README. It has no dependencies of its own and runs nothing on install. three is a peer dependency
-(`>=0.154.0`): `portal.js`, `fade.js`, `sky.js` and `access.js` use the site's own, so a page has
-one three. In Node the modules import as `common/door.js` and so on, for a site's tests, and the
-tools as `common/tools/serve.mjs` and so on. To take a new version, move the tag in package.json
-and run `npm install`. Each version so far only adds. v0.6.1 changes only the remote in the card
-(its text boxes, and where Menu lands), v0.6.2 adds its `forget()`, and both leave the modules of
-v0.1.0 to v0.5.0 as they were. v0.6.3 adds `hallLink` to `door.js`, for a hall other than the
-Hallway.
+(`>=0.154.0`): `portal.js`, `fade.js`, `sky.js`, `access.js` and `controls.js` use the site's own,
+so a page has one three. In Node the modules import as `common/door.js` and so on, for a site's
+tests, and the tools as `common/tools/serve.mjs` and so on. To take a new version, move the tag in
+package.json and run `npm install`. Each version so far only adds. v0.6.1 changes only the remote in
+the card (its text boxes, and where Menu lands), v0.6.2 adds its `forget()`, and both leave the
+modules of v0.1.0 to v0.5.0 as they were. v0.6.3 adds `hallLink` to `door.js`, for a hall other
+than the Hallway. v0.7.0 adds `controls.js` and changes no other module, so a site can move to it
+before it takes the controls.
+
+`src/` goes together: `controls.js` imports `./gamepad.js` and `./tv.js` from beside it, so each
+way below copies or serves the whole folder, and a vendored copy works wherever it lands.
 
 The sites load it in the browser in three ways, as they load layersharedsession.
 
@@ -780,7 +939,7 @@ and the page's import map maps the name to the copy:
 ```
 
 Then a module imports `common/door.js`, in the browser and in Node alike. The import map already
-maps `three`, which `portal.js`, `fade.js`, `sky.js` and `access.js` import.
+maps `three`, which `portal.js`, `fade.js`, `sky.js`, `access.js` and `controls.js` import.
 
 ### `server/vendor.js` (vrlbry, music)
 
@@ -796,17 +955,18 @@ The client names its modules by relative URL, as it does layersharedsession's:
 import { wayBack } from '../vendor/common/door.js';
 ```
 
-`door.js`, `nav.js`, `gamepad.js`, `back-history.js` and `tv.js` import nothing. `portal.js`, `fade.js`, `sky.js` and
-`access.js` import `three` by its bare name, which the page's import map maps, as it does for layersharedsession's
-`avatars.js`;
-so `BARE` needs no entries, and they are for the page, not a worker, which has no import map.
+`door.js`, `nav.js`, `gamepad.js`, `back-history.js` and `tv.js` import nothing. `portal.js`,
+`fade.js`, `sky.js`, `access.js` and `controls.js` import `three` by its bare name, which the
+page's import map maps, as it does for layersharedsession's `avatars.js`, and `controls.js` its
+neighbours by relative URL. So `BARE` needs no entries, and they are for the page, not a worker,
+which has no import map.
 `tools/build-pages.mjs` copies them into the published site with the rest of what the client
 imports. Tests in Node import `common/door.js` and so on.
 
 ### Vite (breadboard)
 
 Import it by name. Vite resolves it through the package's `exports` and bundles it, with the
-site's own three for `portal.js`, `fade.js`, `sky.js` and `access.js`:
+site's own three for `portal.js`, `fade.js`, `sky.js`, `access.js` and `controls.js`:
 
 ```ts
 import { readVisit, wayBack, type WayBack } from 'common/door.js';
@@ -992,14 +1152,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.3
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.7.0
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.3
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.7.0
     with:
       build: npm run build
       path: dist
@@ -1112,6 +1272,97 @@ and [the checklist](#a-site-in-the-app) in a change of their own:
   (v0.6.2). vrlbry's Menu passes over its
   search box without one, and its search and ZIM address boxes keep the keyboard down until OK.
 
+**The walking controls (v0.7.0).** Three copies of one `controls.js` walk visitors about the sites:
+the template's (which art and video take by merge), the hallway's and outside's. Each becomes a
+subclass of common's `Controls` ([`controls.js`](#controlsjs)) and keeps only its own, each in a
+change of its own: the template and the hallway first, then art, video and outside.
+
+- **The template** (`public/js/controls.js` at `f3e1c91`; art's is the same): it becomes the
+  subclass above. It keeps these:
+  - its room: `layout`, set after `super()`, and `castRay` and `clampWalk`, `room.js`'s on
+    `this.layout`;
+  - its hit's `u`, `v` and `piece`, through the `hit` option;
+  - the panel and the pictures: `usable` and `use`, with `onPanel`, `onPiece` and `_press`;
+    `hoverPanel` and `hoverPiece` (`_setHover`); a picture's reticle at 1.3 (`reticleScale`);
+  - `walkInto` and `walkUpTo`.
+
+  For its `tsconfig.json`, the subclass needs some JSDoc:
+  - `@extends {Walking<RoomHit>}`, where `RoomHit` is common's `Hit` with `u`, `v` and `piece`;
+  - a `@param` on the constructor's options: common's without `eye` and `hit`, plus `layout`.
+    Without it, `super()` is checked against an empty object;
+  - `[number, number][]` for the walk's points in `walkInto`.
+
+  Under `strict` (`tsconfig.strict.json`), its overrides need their parameters' types too.
+
+  The rest goes. What is new to it:
+  - A key a page control has used, and one in a `data-own-keys` element, is the page's.
+  - `walkTo` takes `{ face, then }`.
+  - A walk through the doorway from beside it (two points) looks where it goes, then turns to face
+    the room on its last leg.
+  - With less motion, a walk jumps to where it ends, walled in there rather than on the way.
+  - Two fingers neither look nor tap.
+  - A teleport aims at ground that is `walkable` or faces up, rather than at `'floor'`, and the
+    reticle's normal is made unit length.
+  - `onDoor` gets the hit too, there is `restPitch`, and `pointer` replaces `_mouse`.
+- **video**, by merge: as the template. It also keeps these:
+  - `onThing`, with `hoverKind` and `hoverId` (its `use`, `usable` and `_setHover`);
+  - its seats: `seat`, `sit` and `settle`;
+  - `stand()`, which already says whether one sat;
+  - `_riseXR()`, which now overrides common's;
+  - `setPose` and `_onSessionEnd`, each calling `super`.
+
+  Its `_placeHead` is common's now. A seat when the headset is lined up goes in `_lineUp()`
+  (`_placeHead` to the seat in place of `_moveHead`). Its `castRay` and `clampWalk` are
+  `modes.js`'s. `main.js`'s `controls._mouse` becomes `controls.pointer`.
+- **hallway** (`public/js/controls.js`): it keeps these:
+  - its hall: `layout.js`'s `castRay`, and its hit's `door` (the `hit` option);
+  - its doors: `usable` (`'door'` for a door that leads somewhere), `use` and `walkInto(door)`,
+    the door optional so that it still overrides `walkInto()`;
+  - the control panel: `onPanel`, `hoverPanel` and `_press`.
+
+  These are renamed as the template names them:
+  - `setLift(lift)` is `setEyeLift(lift)`, and `lift` is `eyeLift`.
+  - `xrSpeed` and `xrTurnRate` are `moveSpeed` and `turnRate`.
+  - `onSelect(door, how)` is `onDoor(how, hit)`, with the door as `hit.door`.
+  - `clampToHall(layout, x, z, out)` is its `clampWalk(fx, fz, x, z, out)`, which may pass over
+    where the visitor comes from.
+  - `hoverDoor` is common's: true on a doorway. The door pointed at, which `main.js` reads
+    (`hoverDoor?.env`), goes in a field of the hallway's own.
+
+  `KEYS` is common's now: `controls.js` can pass it on (`export { KEYS } from
+  'common/controls.js'`) for `test/tv.test.js`. What is new to it:
+  - These keys are the page's: one a page control has used (`defaultPrevented`), one in a
+    `data-own-keys` element, and Space and Enter on a button or a link.
+  - Its floor sets `walkable` in `castRay`. A click walks there and a trigger teleports there only
+    when it is walkable, and the reticle is light only there.
+  - A walk faces a yaw (`-door.side * Math.PI / 2` for a door) and turns before it is done.
+  - With less motion every walk jumps, a walk through a door too.
+  - `walkTo` takes `{ face, then }`, and there are `restPitch` and `pointer`.
+- **outside** (`public/js/controls.js` at `93b6eda`): it keeps these:
+  - its garden: `garden.js`'s `castRay`, `clampWalk`, `groundAt` and `route`, its eye (the `eye`
+    option) and its hit's own fields (the `hit` option);
+  - its `walkInto` and `resetTo`;
+  - the bench: `sit`, `_seat`, `seated`, `onSeat` and `onBench`, and `stand()`, which now says
+    whether one got up and, in VR, puts the book down first, as the stick and a teleport did;
+  - the seat's height, by overriding `_standOnGround`;
+  - entering and leaving VR seated, in a `sessionstart` listener of its own, `_lineUp` and
+    `_onSessionEnd`.
+
+  The book goes through the places where a site's own comes first:
+  - `castRay`: the open book's `pick` first, then the garden (its `_pick`).
+  - `usable`, `use` and `_setHover`: the bench and the book, open or not. A press off the book,
+    null too, puts it down.
+  - `takeKey`: Home and the book's keys. While reading it takes the arrows, and Q and E, so that
+    only WASD walks.
+  - `takePad`: `PAD_BOOK` and the triggers, and B back in the book (`press.back`).
+  - `takeHand`: while reading, the sticks, and B, Y and the thumbstick.
+  - `takeSwipe`, `takePinch`, `takeWheel` and `takeGrip`: the book's, while it is open.
+
+  What changes for it:
+  - A drag now ends a walk that has a `then` (to the bench), as the template's does.
+  - `aimMiddle` while reading is for `main.js` to clear.
+  - With less motion, the jump is common's: to the walk's end, walled in there.
+
 ## Developing
 
 ```bash
@@ -1122,8 +1373,10 @@ CHROME_TEST=1 npm test   # and start a real Chrome, through launchChrome, on a s
 ```
 
 The `.d.ts` files are made from the JSDoc and committed. After changing a module's JSDoc, run
-`npm run types` and commit them with it: a test fails while they are stale. The tools have JSDoc
-but no `.d.ts`: the sites' scripts that run them are JavaScript.
+`npm run types` and commit them with it: a test fails while they are stale. It removes the old ones
+first, since TypeScript would read `controls.js`'s imports from them, and then refuses to write
+over what it reads. The tools have JSDoc but no `.d.ts`: the sites' scripts that run them are
+JavaScript.
 
 The tools are tested in temporary folders: the server on a free port, the vendor copy in a
 stand-in site (and from this package itself, to check only `src/` goes), and Chrome's profile
@@ -1132,6 +1385,11 @@ without starting Chrome.
 The remote is tested over a stand-in DOM (`test/tv.test.js`: an event's path, focus and the
 selectors it uses), and with `CHROME_TEST=1` on a served page in a real Chrome too, its keys
 pressed through DevTools, so a range's and a caret's own steps are the browser's.
+
+The walking controls are tested in Node over stand-ins (`test/controls.test.js`). three's own
+camera, rig and controllers need no WebGL. Beside them are a renderer whose `xr` gives the
+controllers and the session's events, a view that takes pointer events, the window's keys, a
+gamepad, and a box of a room as a site's subclass, counting each of its methods called.
 
 The sky is outside's picture, call for call: `test/sky.test.js` paints it on a stand-in canvas
 (`test/canvas.js`, which records every call) and checks its fingerprint against the one outside's

@@ -1,8 +1,8 @@
 {
   "name": "common",
-  "version": "0.6.3",
-  "description": "Code shared by the sites behind the Hallway's doors: the door contract (a door's link, the way back, the view from it), VR movement and accessibility settings, a three.js doorway, fade, comfort vignette, gamepad and sky, the browser's Back for an open book, the TV app's remote, and their dev server, vendor copy, Chrome launcher and Pages workflow.",
-  "keywords": ["webxr", "threejs", "hallway", "portal", "deep-link", "gamepad", "sky", "accessibility", "history", "tv", "devtools", "github-pages"],
+  "version": "0.7.0",
+  "description": "Code shared by the sites behind the Hallway's doors: the door contract (a door's link, the way back, the view from it), walking controls, VR and accessibility settings, a three.js doorway, fade, comfort vignette, gamepad and sky, the browser's Back for a book, the TV's remote, and their dev server, vendor copy, Chrome launcher and Pages workflow.",
+  "keywords": ["webxr", "threejs", "hallway", "portal", "deep-link", "controls", "gamepad", "sky", "accessibility", "history", "tv", "devtools", "github-pages"],
   "homepage": "https://github.com/AriaMoKr/common#readme",
   "repository": {
     "type": "git",
@@ -20,6 +20,7 @@
   "exports": {
     "./access.js": "./src/access.js",
     "./back-history.js": "./src/back-history.js",
+    "./controls.js": "./src/controls.js",
     "./door.js": "./src/door.js",
     "./fade.js": "./src/fade.js",
     "./gamepad.js": "./src/gamepad.js",
@@ -38,7 +39,7 @@
   ],
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
-    "types": "tsc -p tsconfig.json"
+    "types": "node -e \"for (const f of require('fs').readdirSync('src')) if (f.endsWith('.d.ts')) require('fs').rmSync('src/' + f)\" && tsc -p tsconfig.json"
   },
   "peerDependencies": {
     "three": ">=0.154.0"

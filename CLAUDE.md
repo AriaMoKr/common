@@ -14,16 +14,18 @@ through an opening, "interior mapping"), `fade.js` (the fade to and from black) 
 (standard-layout gamepads), since 0.3.0 `sky.js` (outside's late afternoon, for every window
 behind every door), since 0.4.0 `access.js` (accessibility settings in `localStorage` under
 `hallway.access`: less motion, a comfort vignette in VR, seated), since 0.5.0
-`back-history.js` (the browser's Back for an open book), and since 0.6.0 `tv.js` (the remote of
-the Android TV app, AriaMoKr/HallwayApp, and the page's answer to its Back and Menu), the tools the sites' Node scripts run
+`back-history.js` (the browser's Back for an open book), since 0.6.0 `tv.js` (the remote of
+the Android TV app, AriaMoKr/HallwayApp, and the page's answer to its Back and Menu), and since
+0.7.0 `controls.js` (the walking controls: a screen, a gamepad, a TV and VR, a `Controls` class
+for each site's own to extend), the tools the sites' Node scripts run
 (`tools/chrome.mjs`, `tools/serve.mjs`, `tools/vendor.mjs`; never served to a page) and the sites'
 reusable Pages workflow (`.github/workflows/pages.yml`). `README.md` is the door contract itself
 (moved from the Hallway's README), the API with the portal's uniforms, how a room picks its sky's
 yaw, what each accessibility setting means and how a site wires it in, "The TV app" (the user
 agent, `window.hallwayTV`, Back and the page's history, and the checklist for a site in the app),
-how each site loads the package, the tools (with why Chrome's profile gets its Local State) and the workflow's caller.
+what a site's `Controls` gives the walking controls, how each site loads the package, the tools (with why Chrome's profile gets its Local State) and the workflow's caller.
 
-The sites install it from GitHub at a tag (`github:AriaMoKr/common#v0.6.3`) and load it in three
+The sites install it from GitHub at a tag (`github:AriaMoKr/common#v0.7.0`) and load it in three
 ways: a vendor copy and an import map (hallway, outside: `tools/vendor.mjs`), `server/vendor.js`
 (vrlbry, music), and Vite (breadboard, TypeScript). Every site takes the modules of 0.1.0 to 0.4.0
 from here (vrlbry and music keep their own gamepad reader, on `stick` and the rest; breadboard has
@@ -32,8 +34,11 @@ brings: `back-history.js` (vrlbry, music, outside), `chrome.mjs` (breadboard `sc
 outside `tools/lib/`), `tools/serve.mjs` and `tools/vendor.mjs` (hallway, outside,
 layersharedsession) and its own `pages.yml`. Only the hallway has a TV view, with its own
 `public/js/tv.js` (whose `roomFromInput` stays there: it needs layersharedsession's `isRoom`); the
-others take 0.6.0's in a change of their own. README, "Coming from a site's own copy", says what
-changes for each.
+others take 0.6.0's in a change of their own. Three copies of one `controls.js` walk the visitor
+(the hallway's, outside's and the template's, AriaMoKr/RoomTemplateEmpty, which art and video
+take by merge); each moves to 0.7.0's `Controls` in a message of its own, the template and the
+hallway first, keeping only its room's: what a ray meets, where one may walk, what can be used. README,
+"Coming from a site's own copy", says what changes for each.
 
 No GitHub Pages: nothing here is a site. `.github/workflows/pages.yml` is only for callers (`on:
 workflow_call` and nothing else; `test/package.test.js` checks it): the sites' own workflows call
@@ -44,7 +49,7 @@ it at a tag, and it never runs for common itself. Don't give it other triggers, 
 ```bash
 npm install     # devDependencies: TypeScript (the .d.ts files), three and @types/three (tests, types)
 npm test        # node --test "test/*.test.js"
-npm run types   # tsc -p tsconfig.json: src/*.d.ts from the JSDoc
+npm run types   # src/*.d.ts from the JSDoc (the old ones deleted first, as tsc reads them as inputs)
 CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read the bad-password count first)
 ```
 
@@ -101,6 +106,21 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   Since 0.6.2: `forget()` drops the control last left (`_last`), so Menu goes to `first()` next,
   for a site whose visitor's doing has changed (outside's book opened); in the card it changes
   nothing, since leaving remembers the control left then.
+- `src/controls.js`: the template's `public/js/controls.js` (RoomTemplateEmpty `f3e1c91`) call for
+  call, with what is general in outside's (`93b6eda`). `KEYS` (frozen, read through `keyOf`) and
+  `Controls<H extends Hit>({ renderer, camera, rig, scene, dom, eye = 1.6, hit, window,
+  getGamepads })`; `rig` is the body (yaw), the camera the head. Public: `setPose`, `setNav`,
+  `setEyeLift`, `walkTo(x, z, { face, then })`, `update(dt)`, `useMiddle()`, `hover`, `hoverDoor`,
+  `pointer`, `hands`, `padActive`, `hasPad`, `aimMiddle`, `reduceMotion`, `restPitch`,
+  `moveSpeed`, `turnRate`, and the callbacks `onDoor(how, hit)`, `onSqueeze`, `onTeleport(move)`,
+  `onActivity`, `onPadActive`, `onPadBack`. What the site gives are methods it overrides:
+  `castRay` and `clampWalk` (writing into `out`), `usable`, `use(hit, how)` (common's takes the
+  doorway and `walkable` ground), `walkInto`, `stand`, `groundAt`, `route`, `reticleScale`,
+  `_setHover`, `_riseXR`, and the places a site's own comes first (`takeKey`, `takePad` with its
+  `PadPress`, `takeHand`, `takeSwipe`, `takePinch`, `takeWheel`, `takeGrip`), each doing nothing
+  or returning false here. The constructor calls none of them: a subclass's fields are set only
+  after `super()`. The underscore members a subclass calls (`_move`, `_moveHead`, `_startWalk`,
+  `_teleport`, …) are `@protected` and part of the contract. Nothing is allocated per frame.
 - `src/*.d.ts`: generated by `npm run types` and committed.
 - `tools/chrome.mjs`: breadboard's `scripts/lib/chrome.mjs` (outside's `tools/lib/` is the same):
   `findChrome`, `launchChrome({ headless, args, url })` (resolves to `{ endpoint, profile, process,
@@ -127,13 +147,19 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   its fields neutral, and the prefix), `tv.test.js` (the hallway's cases, `tvMode`, `keyOf`,
   `keepsKey`, and the `Remote` over a stand-in DOM in the file, text boxes held, `first()` and `forget()` among them: an event's path from the window's
   capture down and back up, focus and focusout, the few selectors it asks for; a real Chrome on a
-  served page with `CHROME_TEST=1`, its keys through `Input.dispatchKeyEvent`), `chrome.test.js` (the profile's Local State checked without
+  served page with `CHROME_TEST=1`, its keys through `Input.dispatchKeyEvent`), `controls.test.js`
+  (the walking controls over stand-ins: a renderer whose `xr` gives two controllers and session
+  events, pointer events on a view, the window's keys, a gamepad, and a box of a room with a
+  doorway and a button, as a subclass counting each site method: the keys and those left to the
+  page, a drag and a tap, the pad taking over and handing back, walks to a point, through the
+  doorway, along a route, with less motion and into a wall, the sticks, entering and leaving VR,
+  `setEyeLift`), `chrome.test.js` (the profile's Local State checked without
   starting Chrome, `Page` over a stand-in WebSocket; a real Chrome with `CHROME_TEST=1`),
   `serve.test.js` (a temporary site on a free port, and the command), `vendor.test.js` (a temporary
   site: files, folders by extension, optional and required entries, the list's checks, the skip
   under `node_modules`, and this package's own `src/` alone), `package.test.js` (exports, `files`,
-  the peer dependency, what each module and tool imports, the workflow only called, the README at
-  this version), `types.test.js` (the `.d.ts` files are current, and `test/types/site.ts` compiles
+  the peer dependency, what each module and tool imports, a module's own imports naming modules
+  beside it, the workflow only called, the README at this version), `types.test.js` (the `.d.ts` files are current, and `test/types/site.ts` compiles
   as breadboard's tsconfig would).
 
 ## Conventions
@@ -155,10 +181,14 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   names in `history.state` likewise, for the entries already in visitors' tabs. After a change:
   commit, tag a new version, push, then move each site's tag and run `npm install` there (and the
   `@v…` of its workflow's `uses:`; `test/package.test.js` checks the README names this version).
-- **Imports: three only, by its bare name.** `door.js`, `nav.js` and `gamepad.js` import nothing
+- **Imports: three only, by its bare name, and src/'s own.** `door.js`, `nav.js` and `gamepad.js` import nothing
   and stay pure (but for `localStorage` in `nav.js`); `portal.js`, `fade.js`, `sky.js` and
   `access.js` import only `three`, which every site maps or bundles, so a vendored copy works in whatever folder it lands.
-  `back-history.js` and `tv.js` import nothing. The tools import only `node:` modules, so a site runs them
+  `back-history.js` and `tv.js` import nothing. `controls.js` imports `three`, `./gamepad.js` and
+  `./tv.js`: `src/` goes together (a vendor list names the folder, `server/vendor.js` copies it,
+  Vite resolves it in the package), so a module's own beside it is always there. Keep it to
+  that: a new module imports `three` and, if it must, its neighbours by `./`, nothing else.
+  The tools import only `node:` modules, so a site runs them
   with nothing else installed, and they never reach a page: a site's vendor list names
   `common/src`, whose `ext` keeps the `.d.ts` files out.
   `test/package.test.js` checks each module's imports. three stays a peer dependency (the site's

@@ -7,7 +7,7 @@
 #
 #   jobs:
 #     pages:
-#       uses: AriaMoKr/common/.github/workflows/pages.yml@v0.6.3
+#       uses: AriaMoKr/common/.github/workflows/pages.yml@v0.7.0
 #       with:            # breadboard's; others leave these out
 #         build: npm run build
 #         path: dist

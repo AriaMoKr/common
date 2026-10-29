@@ -34,16 +34,24 @@ describe('the package', () => {
     assert.deepEqual(Object.keys(pkg.devDependencies), ['@types/three', 'three', 'typescript']);
   });
 
-  it('imports only three, by its bare name, so a vendored copy works wherever it is put', () => {
-    const THREE_USERS = ['access.js', 'fade.js', 'portal.js', 'sky.js'];
+  it('imports only three, by its bare name, and its own modules beside it, so a vendored copy works wherever it is put', () => {
+    // src/ goes together (a vendor copy names the folder), so a module may import another beside it.
+    const IMPORTS = {
+      'access.js': ['three'],
+      'controls.js': ['three', './gamepad.js', './tv.js'],
+      'fade.js': ['three'],
+      'portal.js': ['three'],
+      'sky.js': ['three'],
+    };
     for (const m of modules) {
       const src = readFileSync(new URL(`../src/${m}`, import.meta.url), 'utf8');
       const imports = [...src.matchAll(/^\s*import\s[^;'"]*['"]([^'"]+)['"]/gm)].map((x) => x[1]);
-      assert.deepEqual(imports, THREE_USERS.includes(m) ? ['three'] : [], m);
+      assert.deepEqual(imports, IMPORTS[m] ?? [], m);
+      for (const i of imports.filter((i) => i.startsWith('.'))) assert.ok(modules.includes(i.slice(2)), `${m} imports ${i}`);
       assert.doesNotMatch(src, /^\s*export\s[^;'"]*\bfrom\s*['"]/m, m);
       assert.doesNotMatch(src, /\bimport\s*\(/, m);
     }
-    assert.deepEqual(modules.filter((m) => THREE_USERS.includes(m)), THREE_USERS, 'the modules named are there');
+    assert.deepEqual(modules.filter((m) => m in IMPORTS), Object.keys(IMPORTS), 'the modules named are there');
   });
 
   it('has tools that import only Node\'s own modules, so a site runs them with nothing else installed', () => {

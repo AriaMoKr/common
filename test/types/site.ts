@@ -19,6 +19,8 @@ import { BackHistory } from 'common/back-history.js';
 import type { BackHistoryOptions } from 'common/back-history.js';
 import { Remote, SPARE_KEYS, focusStops, isTV, keepsKey, keyOf, nextStop, tvMode } from 'common/tv.js';
 import type { RemoteOptions } from 'common/tv.js';
+import { Controls, KEYS } from 'common/controls.js';
+import type { ControlsOptions, Hand, Hit, How, KeyAction, PadPress } from 'common/controls.js';
 
 const visit: Visit = readVisit('?from=hallway&dx=0.12');
 const dx: number | null = visit.dx;
@@ -142,6 +144,116 @@ remote._stops();
 // @ts-expect-error an address's search, not the whole of it
 tvMode({ search: new URLSearchParams() });
 
+// Walking about the room: the site's own Controls, its room in its own fields and methods, its hits
+// with the picture pointed at.
+interface RoomHit extends Hit {
+  piece: number;
+}
+const blankHit = (): RoomHit => ({ t: 0, kind: '', x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, walkable: false, piece: -1 });
+
+class RoomControls extends Controls<RoomHit> {
+  hoverPiece = -1;
+  onPiece: (i: number, how: How) => void = () => {};
+  reading = false;
+  readonly size: number;
+
+  constructor(options: ControlsOptions<RoomHit>, size: number) {
+    super({ ...options, hit: blankHit });
+    this.size = size;
+  }
+
+  castRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, out: RoomHit): RoomHit | null {
+    if (dy >= 0) return null;
+    const t = -oy / dy, x = ox + dx * t, z = oz + dz * t;
+    Object.assign(out, { t, kind: 'floor', x, y: 0, z, nx: 0, ny: 1, nz: 0, walkable: Math.abs(x) < this.size && Math.abs(z) < this.size, piece: -1 });
+    return out;
+  }
+
+  clampWalk(_fx: number, _fz: number, x: number, z: number, out: { x: number; z: number }) {
+    out.x = Math.max(-this.size, Math.min(this.size, x));
+    out.z = Math.max(-this.size, Math.min(this.size, z));
+    return out;
+  }
+
+  usable(hit: RoomHit | null): string | null {
+    return hit && hit.piece >= 0 ? 'piece' : super.usable(hit);
+  }
+
+  use(hit: RoomHit | null, how: How): void {
+    if (hit && hit.piece >= 0) this.onPiece(hit.piece, how);
+    else super.use(hit, how);
+  }
+
+  protected _setHover(usable: string | null, hit: RoomHit | null): void {
+    super._setHover(usable, hit);
+    this.hoverPiece = usable === 'piece' && hit ? hit.piece : -1;
+  }
+
+  walkInto(): void {
+    this._startWalk([[0, -1], [0, 0.3]], Math.PI);
+  }
+
+  walkUpTo(i: number, done: (() => void) | null = null): void {
+    if (this.renderer.xr.isPresenting) this._teleport(i, -2);
+    else this._startWalk([[i, -2]], 0, done);
+  }
+
+  takeKey(e: KeyboardEvent, name: string): boolean {
+    if (name !== 'Home') return false;
+    e.preventDefault();
+    this.setPose(0, 0, 0);
+    return true;
+  }
+
+  takePad(pad: Gamepad, _dt: number, press: PadPress): boolean {
+    if (!this.reading || !press.back) return pad.buttons[4]?.pressed ?? false;
+    press.back = false;
+    this.reading = false;
+    return true;
+  }
+
+  takeHand(hand: Hand<RoomHit>, _pad: Gamepad, ax: number, _ay: number, _dt: number): boolean {
+    return this.reading && hand.source?.handedness === 'right' && Math.abs(ax) > 0.6;
+  }
+}
+
+const renderer = new THREE.WebGLRenderer();
+const head = new THREE.PerspectiveCamera(70, 1, 0.05, 100);
+const body = new THREE.Group();
+body.add(head);
+const walking = new RoomControls({ renderer, camera: head, rig: body, scene: new THREE.Scene(), dom: renderer.domElement }, 3);
+walking.setNav(nav);
+walking.setEyeLift(lift);
+walking.reduceMotion = reduce;
+walking.restPitch = tv ? -0.12 : 0;
+walking.aimMiddle = tv;
+walking.onDoor = (how, hit) => (how === 'screen' && hit.kind === 'door' ? walking.walkInto() : fade.to(1, 0.3, () => location.assign(link)));
+walking.onPiece = (i) => walking.walkUpTo(i, () => {});
+walking.onTeleport = (move) => fade.to(1, 0.1, () => (move(), fade.to(0, 0.1)));
+walking.onSqueeze = (hand) => hand.controller.position.length();
+walking.walkTo(1, -2, { face: Math.PI, then: () => walking.setPose(1, -2, Math.PI) });
+walking.update(1 / 72);
+vignette.update(1 / 72, walking.moveSpeed, walking.turnRate, renderer.xr.isPresenting);
+const pointedAt: string | null = walking.hover;
+const mouseAt: { x: number; y: number } | null = walking.pointer;
+const hands: Hand<RoomHit>[] = walking.hands;
+const piece: number | undefined = walking.hands[0]?.last?.piece;
+const walkKey: KeyAction | undefined = KEYS[keyOf(new KeyboardEvent('keydown', { code: 'KeyW' }))];
+new Remote({ ...remoteOptions, use: () => walking.useMiddle() });
+
+// @ts-expect-error its helpers are a subclass's
+walking._move(0, 0);
+// @ts-expect-error what the keys do stays as it is
+KEYS.KeyW = 'back';
+// @ts-expect-error a hit of the site's own shape
+new RoomControls({ renderer, camera: head, rig: body, scene: body, dom: renderer.domElement, hit: () => ({ t: 0 }) }, 3);
+// @ts-expect-error a walk faces a yaw
+walking.walkTo(1, -2, { face: 'north' });
+// @ts-expect-error used on a screen or in VR
+walking.use(null, 'tv');
+// @ts-expect-error a move that isn't one
+walking.setNav({ move: 'fly', turn: 'snap' });
+
 // @ts-expect-error motion is one of three
 const sometimes: Access = { ...ACCESS_DEFAULTS, motion: 'sometimes' };
 // @ts-expect-error the vignette moves on with the speed, the turning and whether in VR
@@ -173,4 +285,4 @@ NAV_DEFAULTS.move = 'teleport';
 // @ts-expect-error a view's sizes are numbers
 const depth: string = hung!.depth;
 
-export { dx, views, urls, onward, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects, reduce, stopWatching, kept2, ring, lift, accessKey, sometimes, throughHistory, bookLevel, answering, stepped, intoCard, inCard, next };
+export { dx, views, urls, onward, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects, reduce, stopWatching, kept2, ring, lift, accessKey, sometimes, throughHistory, bookLevel, answering, stepped, intoCard, inCard, next, pointedAt, mouseAt, hands, piece, walkKey };
