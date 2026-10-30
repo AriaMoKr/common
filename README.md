@@ -758,11 +758,12 @@ room.
 
 What a click, a tap, A, OK or a trigger is on goes to `use(hit, how)`. Common's own takes the
 doorway (`onDoor(how, hit)`) and ground one may stand on (`walkable`): a walk there on a screen,
-a teleport in VR. A walk follows the site's `route` there and turns to its `face` on the way (on
-the last leg, when it goes along more than one point, looking where it goes before that). It calls
-`then` once there and turned. A wall, a key, a drag or the gamepad ends it, and then `then` isn't
-called. With `reduceMotion` it jumps to the end. The rig stands on the site's ground
-(`groundAt`), under the head in VR, `eyeLift` above it there (`setEyeLift`).
+a teleport in VR. A walk is only a screen's: in VR, `update` walks nowhere. It follows the site's
+`route` there and turns to its `face` on the way (on the last leg, when it goes along more than one
+point, looking where it goes before that). It calls `then` once there and turned. A wall, a key, a
+drag or the gamepad ends it, and then `then` isn't called. With `reduceMotion` it jumps to the end.
+The rig stands on the site's ground (`groundAt`), under the head in VR, `eyeLift` above it there
+(`setEyeLift`).
 
 A key is the page's, and neither the site's nor walking's, in these cases:
 
@@ -872,14 +873,17 @@ site took what it was given:
 | `hover`, `hoverDoor`, `pointer` | What is pointed at that could be used, whether it is the doorway, and the mouse over the view in client pixels, or null. |
 | `padActive`, `hasPad`, `aimMiddle` | The gamepad used last, one connected, and the middle of the view as the pointer. |
 | `moveSpeed`, `turnRate` | The sticks' smooth walking and turning this frame in VR, for the vignette. |
-| `reduceMotion`, `eyeLift`, `restPitch`, `move`, `turn` | The settings. `restPitch` is where the view rests after a walk or `setPose` (outside's TV looks a little down). |
+| `reduceMotion`, `eyeLift`, `restPitch`, `move`, `turn` | The settings. `restPitch` is where the view comes back to after `setPose` or a walk with a `face` (outside's TV looks a little down). A walk without one leaves the view as it was, unless it looked where it went: then it ends a little down. |
 | `hands` | `{ controller, laser, tip, reticle, source, hit, last, aiming }` each. |
 | `onDoor(how, hit)`, `onTeleport(move)`, `onSqueeze(hand)`, `onActivity()`, `onPadActive(on)`, `onPadBack()` | The site's callbacks. `onTeleport` blinks the view around `move()`, which puts the visitor there. |
 
 The members with an underscore that a subclass calls are `protected` in `controls.d.ts`, and as
 much the contract as the rest:
 
-- `_startWalk(points, face, done)`: a walk of the site's own, such as a doorway's or a picture's.
+- `_startWalk(points, face, done, turn)`: a walk of the site's own, such as a doorway's or a
+  picture's. With `turn` (by default, when there is more than one point) it looks where it goes
+  and faces on its last leg. `false` (since v0.7.1) faces from the first step, for a walk whose
+  view is handed on before it ends, such as the hallway's through a door.
 - `_move(x, z)`: the rig, walled in.
 - `_moveHead(x, z)` and `_placeHead(x, z)`: the head, walled in or not.
 - `_teleport(x, z)`, `_turnAboutHead(angle)` and `_headYaw()`.
@@ -898,7 +902,7 @@ Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.7.0",
+  "common": "github:AriaMoKr/common#v0.7.1",
   "three": "0.186.1"
 }
 ```
@@ -912,7 +916,8 @@ package.json and run `npm install`. Each version so far only adds. v0.6.1 change
 the card (its text boxes, and where Menu lands), v0.6.2 adds its `forget()`, and both leave the
 modules of v0.1.0 to v0.5.0 as they were. v0.6.3 adds `hallLink` to `door.js`, for a hall other
 than the Hallway. v0.7.0 adds `controls.js` and changes no other module, so a site can move to it
-before it takes the controls.
+before it takes the controls. v0.7.1 adds `_startWalk`'s `turn`, and corrects the notes on moving
+a site's own controls to it.
 
 `src/` goes together: `controls.js` imports `./gamepad.js` and `./tv.js` from beside it, so each
 way below copies or serves the whole folder, and a vendored copy works wherever it lands.
@@ -1152,14 +1157,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.7.0
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.7.1
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.7.0
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.7.1
     with:
       build: npm run build
       path: dist
@@ -1298,7 +1303,8 @@ change of its own: the template and the hallway first, then art, video and outsi
   - A key a page control has used, and one in a `data-own-keys` element, is the page's.
   - `walkTo` takes `{ face, then }`.
   - A walk through the doorway from beside it (two points) looks where it goes, then turns to face
-    the room on its last leg.
+    the doorway on its last leg. To face it from the first step, as before, `walkInto` passes
+    `false` as `_startWalk`'s `turn` (v0.7.1).
   - With less motion, a walk jumps to where it ends, walled in there rather than on the way.
   - Two fingers neither look nor tap.
   - A teleport aims at ground that is `walkable` or faces up, rather than at `'floor'`, and the
@@ -1335,16 +1341,29 @@ change of its own: the template and the hallway first, then art, video and outsi
     `data-own-keys` element, and Space and Enter on a button or a link.
   - Its floor sets `walkable` in `castRay`. A click walks there and a trigger teleports there only
     when it is walkable, and the reticle is light only there.
-  - A walk faces a yaw (`-door.side * Math.PI / 2` for a door) and turns before it is done.
+  - A walk faces a yaw (`-door.side * Math.PI / 2` for a door) and turns before it is done. One
+    along more than one point looks where it goes and faces only on its last leg, so `walkInto`
+    passes `false` as `_startWalk`'s `turn` (v0.7.1), to face the door from the first step as it
+    does now. `main.js`'s `go()` hands the view on as the head crosses the threshold, 0.8 m into
+    the last leg; without `false`, the next site's view would be turned by up to 43°.
   - With less motion every walk jumps, a walk through a door too.
   - `walkTo` takes `{ face, then }`, and there are `restPitch` and `pointer`.
 - **outside** (`public/js/controls.js` at `93b6eda`): it keeps these:
   - its garden: `garden.js`'s `castRay`, `clampWalk`, `groundAt` and `route`, its eye (the `eye`
     option) and its hit's own fields (the `hit` option);
+  - on a screen, a walk to the water and to ground one can't stand on: its `use` calls `walkTo`
+    for those (its `route` ends at the nearest place one can stand) before `super.use`, which
+    walks only to `walkable` ground;
   - its `walkInto` and `resetTo`;
   - the bench: `sit`, `_seat`, `seated`, `onSeat` and `onBench`, and `stand()`, which now says
     whether one got up and, in VR, puts the book down first, as the stick and a teleport did;
-  - the seat's height, by overriding `_standOnGround`;
+  - the seat's height, by overriding `_standOnGround`, and two guards on it:
+    - `setPose` clears `seated`, then calls `super`. Without that, a visitor who goes through the
+      door from the bench with less motion, and comes back with Back, stands at the door at the
+      bench's height, and their first step puts them back on the bench.
+    - While seated, `setEyeLift` keeps the lift and leaves the rig. Common's sets the rig's height
+      at once, past `_standOnGround`, so in VR the view would jump about 0.4 m and settle back at
+      each change of a setting.
   - entering and leaving VR seated, in a `sessionstart` listener of its own, `_lineUp` and
     `_onSessionEnd`.
 

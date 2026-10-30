@@ -211,7 +211,7 @@ class Room extends Controls {
     this.hoverButton = usable === 'button';
   }
 
-  /** The template's: up to the front of the doorway, then through it, facing back into the room. */
+  /** The template's: up to the front of the doorway, then through it, facing the doorway. */
   walkInto() {
     this.count('walkInto');
     this.stand();
@@ -819,7 +819,7 @@ describe('walks', () => {
     assert.equal(c.yaw, 0, 'a walk to one point doesn\'t turn');
   });
 
-  it('go through the doorway (the site\'s walkInto), facing back into the room', () => {
+  it('go through the doorway (the site\'s walkInto), facing it', () => {
     const { c, rig } = setup();
     c.setPose(2, -3, 0);
     c.walkInto();
@@ -848,6 +848,28 @@ describe('walks', () => {
     near(rig.position.x, 2, 1e-9);
     near(rig.position.z, -5, 1e-9);
     near(c.yaw, -Math.PI / 2, 0.01);
+  });
+
+  it('face from the first step with turn false, as a walk whose view is handed on before it ends must', () => {
+    // Beside the doorway, facing along the wall: the first leg goes along it, the last through.
+    const walk = (turn) => {
+      const t = setup();
+      t.c.setPose(-2.5, -0.5, -Math.PI / 2);
+      t.c._startWalk([[-0.3, -1], [-0.3, 0.3]], Math.PI, null, turn);
+      run(t.c, 0.5);
+      return t;
+    };
+    const looks = walk(undefined).c, faces = walk(false);
+    assert.equal(looks.auto.turn, true, 'by default, along more than one point');
+    near(looks.yaw, Math.atan2(-2.2, 0.5), 0.05);
+    assert.equal(faces.c.auto.turn, false);
+    near(angle(faces.c.yaw - Math.PI), 0, 0.1);
+    assert.equal(faces.c.pitch, 0, 'at restPitch on the way');
+    run(faces.c, 3);
+    assert.equal(faces.c.auto, null);
+    near(faces.rig.position.x, -0.3, 1e-9);
+    near(faces.rig.position.z, 0.3, 1e-9);
+    near(angle(faces.c.yaw - Math.PI), 0, 0.01);
   });
 
   it('jump with less motion, onto the ground there, facing, then calling then', () => {

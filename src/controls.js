@@ -88,7 +88,8 @@ export const KEYS = Object.freeze({
  * @property {number} i the point it goes to now
  * @property {number | null} face the yaw it turns to on the way, or null
  * @property {number} speed metres per second
- * @property {boolean} turn along more than one point: it looks where it goes
+ * @property {boolean} turn it looks where it goes, facing only on its last leg (by default, along
+ *   more than one point)
  * @property {(() => void) | null} done once there (and turned)
  */
 
@@ -159,8 +160,10 @@ export class Controls {
     this.moveSpeed = 0;
     this.turnRate = 0;
     /**
-     * The pitch the view comes back to, after a walk or setPose: level, unless a site sets it (a
-     * TV's a little down in outside, as its remote can't look up or down).
+     * The pitch the view comes back to, after setPose or a walk that faces somewhere: level, unless
+     * a site sets it (a TV's a little down in outside, as its remote can't look up or down). A walk
+     * facing nowhere leaves the view as it was, unless it looked where it went: then it ends a
+     * little down (towards -0.1, or this if lower).
      */
     this.restPitch = 0;
     /** (how, hit) when the doorway is chosen (use). @type {(how: How, hit: H) => void} */
@@ -278,7 +281,8 @@ export class Controls {
 
   /**
    * Walks to (x, z) along the site's route there, then turns to `face` (a yaw) if given and calls
-   * `then`; with less motion, there at once. Gets up first (stand).
+   * `then`; with less motion, there at once. Gets up first (stand). Only on a screen: in VR, where
+   * update walks nowhere, a site teleports instead (_teleport), as use does.
    * @param {number} x
    * @param {number} z
    * @param {{ face?: number | null, then?: (() => void) | null }} [options]
@@ -292,15 +296,18 @@ export class Controls {
   }
 
   /**
-   * Starts a walk along points, turning to `face` on the way (on its last leg, if it goes along
-   * more than one point, as it looks where it goes before that) and calling `done` once there and
-   * turned. With less motion it jumps to the end. A wall ends it, and so does walking or looking.
+   * Starts a walk along points, turning to `face` on the way and calling `done` once there and
+   * turned. With `turn` (by default, when it goes along more than one point) it looks where it goes
+   * and turns to `face` on its last leg; without, it turns to `face` from its first step, as a walk
+   * whose view is handed on before it ends must (through a door). With less motion it jumps to the
+   * end. A wall ends it, and so does walking or looking. Only on a screen, as walkTo.
    * @protected
    * @param {[number, number][]} points
    * @param {number | null} face
    * @param {(() => void) | null} [done]
+   * @param {boolean} [turn]
    */
-  _startWalk(points, face, done = null) {
+  _startWalk(points, face, done = null, turn = points.length > 1) {
     if (this.reduceMotion) {
       // Straight to the end (where the site lets one be there, not on the way: outside's route
       // crosses the water by its bridge), facing `face` if given.
@@ -327,7 +334,7 @@ export class Controls {
       z = pz;
     }
     // Long walks go faster, so none takes much more than a second and a half.
-    this.auto = { points, i: 0, face, speed: clamp(length / 1.5, 2.2, 7), turn: points.length > 1, done };
+    this.auto = { points, i: 0, face, speed: clamp(length / 1.5, 2.2, 7), turn, done };
   }
 
   /** @param {number} dt seconds since the last frame */

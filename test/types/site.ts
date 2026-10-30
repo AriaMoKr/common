@@ -193,6 +193,11 @@ class RoomControls extends Controls<RoomHit> {
     this._startWalk([[0, -1], [0, 0.3]], Math.PI);
   }
 
+  walkThrough(side: number): void {
+    // Facing the door from the first step: the view is handed on before the walk ends.
+    this._startWalk([[side * 0.75, -2], [side * 1.9, -2]], (-side * Math.PI) / 2, null, false);
+  }
+
   walkUpTo(i: number, done: (() => void) | null = null): void {
     if (this.renderer.xr.isPresenting) this._teleport(i, -2);
     else this._startWalk([[i, -2]], 0, done);
@@ -232,6 +237,7 @@ walking.onPiece = (i) => walking.walkUpTo(i, () => {});
 walking.onTeleport = (move) => fade.to(1, 0.1, () => (move(), fade.to(0, 0.1)));
 walking.onSqueeze = (hand) => hand.controller.position.length();
 walking.walkTo(1, -2, { face: Math.PI, then: () => walking.setPose(1, -2, Math.PI) });
+walking.walkThrough(1);
 walking.update(1 / 72);
 vignette.update(1 / 72, walking.moveSpeed, walking.turnRate, renderer.xr.isPresenting);
 const pointedAt: string | null = walking.hover;
