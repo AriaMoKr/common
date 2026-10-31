@@ -15,17 +15,20 @@ through an opening, "interior mapping"), `fade.js` (the fade to and from black) 
 behind every door), since 0.4.0 `access.js` (accessibility settings in `localStorage` under
 `hallway.access`: less motion, a comfort vignette in VR, seated), since 0.5.0
 `back-history.js` (the browser's Back for an open book), since 0.6.0 `tv.js` (the remote of
-the Android TV app, AriaMoKr/HallwayApp, and the page's answer to its Back and Menu), and since
+the Android TV app, AriaMoKr/HallwayApp, and the page's answer to its Back and Menu), since
 0.7.0 `controls.js` (the walking controls: a screen, a gamepad, a TV and VR, a `Controls` class
-for each site's own to extend), the tools the sites' Node scripts run
+for each site's own to extend), and since 0.8.0 `panel.js` (the 3D panels, drawn on a canvas and
+hit by a ray's uv) and `text-view.js` (an open book's text as a page on a screen, its place shared
+with the 3D book: a `TextView` class for each site's own view to extend), the tools the sites' Node scripts run
 (`tools/chrome.mjs`, `tools/serve.mjs`, `tools/vendor.mjs`; never served to a page) and the sites'
 reusable Pages workflow (`.github/workflows/pages.yml`). `README.md` is the door contract itself
 (moved from the Hallway's README), the API with the portal's uniforms, how a room picks its sky's
 yaw, what each accessibility setting means and how a site wires it in, "The TV app" (the user
 agent, `window.hallwayTV`, Back and the page's history, and the checklist for a site in the app),
-what a site's `Controls` gives the walking controls, how each site loads the package, the tools (with why Chrome's profile gets its Local State) and the workflow's caller.
+what a site's `Controls` gives the walking controls, the panels' elements, what a site's
+`TextView` gives the text view, how each site loads the package, the tools (with why Chrome's profile gets its Local State) and the workflow's caller.
 
-The sites install it from GitHub at a tag (`github:AriaMoKr/common#v0.7.1`) and load it in three
+The sites install it from GitHub at a tag (`github:AriaMoKr/common#v0.8.0`) and load it in three
 ways: a vendor copy and an import map (hallway, outside: `tools/vendor.mjs`), `server/vendor.js`
 (vrlbry, music), and Vite (breadboard, TypeScript). Every site takes the modules of 0.1.0 to 0.4.0
 from here (vrlbry and music keep their own gamepad reader, on `stick` and the rest; breadboard has
@@ -37,8 +40,12 @@ layersharedsession) and its own `pages.yml`. Only the hallway has a TV view, wit
 others take 0.6.0's in a change of their own. Three copies of one `controls.js` walk the visitor
 (the hallway's, outside's and the template's, AriaMoKr/RoomTemplateEmpty, which art and video
 take by merge); each moves to 0.7.0's `Controls` in a message of its own, the template and the
-hallway first, keeping only its room's: what a ray meets, where one may walk, what can be used. README,
-"Coming from a site's own copy", says what changes for each.
+hallway first, keeping only its room's: what a ray meets, where one may walk, what can be used.
+vrlbry's text view and 3D panel have two more copies each (music's by merge; outside's, cut down
+on 2026-10-24, and its `canvas-panel.js`); each moves to 0.8.0's `TextView` and `Panel` in a change
+of its own, vrlbry and outside first, then music by merge, keeping only its book's: its places, its
+parts and how they are built, what its toolbar does. README, "Coming from a site's own copy", says
+what changes for each.
 
 No GitHub Pages: nothing here is a site. `.github/workflows/pages.yml` is only for callers (`on:
 workflow_call` and nothing else; `test/package.test.js` checks it): the sites' own workflows call
@@ -126,6 +133,34 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   where it goes and faces on the last leg, and `false` faces from the first step: the hallway's
   door walk, whose view `go()` hands on at the threshold, 0.8 m into the last leg. README, "Coming
   from a site's own copy", also has outside's water walks and bench guards since 0.7.1.
+- `src/panel.js`: vrlbry's `public/js/ui/panel.js` (`eb0dfab`) with outside's `canvas-panel.js`
+  (`fadc2e1`) and music's (`e665a2e`) where general. `Panel({ width, height, pxPerMeter = 1200, px,
+  background, radius, anisotropy, ring = 0, canvas })`: the canvas by `pxPerMeter` (at most 2048 a
+  side, vrlbry's) or `px` wide (outside's); `ring` the outline's width round the row pointed at (0
+  vrlbry's, 2 outside's, 4 music's on a TV). Elements `text`, `button`, `slider`, `list` (vrlbry's
+  drawing, its scroll bar's ▲, ▼, track and dragged thumb), `image`, `rect` and `custom`
+  (`el.draw(g, el)`); a pointer's methods take numbers (`elementAt`, `pointerMove`, `click`,
+  `pressAt`, `dragTo`: `(u, v)`), one point reused so a ray allocates nothing; `set` redraws only
+  on a change; `pointerLeave` clears a slider's `hoverValue`. `Label`, `wrapText`, `UI`.
+- `src/text-view.js`: vrlbry's `public/js/ui/text-view.js` (`eb0dfab`) without its book, with
+  outside's (`fadc2e1`: the place again a frame after opening, each theme's `color-scheme`,
+  `turn(side)`, `scrollStep(dir)`) and music's (`e665a2e`: A− and A+ named "A− smaller text" and
+  "A+ larger text"). `TEXT_VIEW_CSS` (the shell's rules; a `<style id="tv-view-style">` first in
+  `<head>`, once a document; `.tv-body`'s rules stay in the sites) and `TextView<P>({ root, tv,
+  step, returnFocus, onOpen, onClose })`. A place `P` is the site's, kept and handed back, never
+  read. Public: `open`, `close({ keepPlace })`, `toggle`, `follow`, `aim(place)`, `turn`,
+  `scrollStep`, `isOpen`, `part`, and for a TV `tocOpen`, `closeToc`, `layer`, `cardStart`,
+  `linkHere`, `inBar`, `onScreen`. The site's methods, overridden: `bookOpen`, `presenting`,
+  `bookKey`, `partCount`, `partOf`, `partStart`, `renderPart(body, part, { onLink })` (may be
+  async), `placeShown`, `showsPlace`, `placeAimed`, `placeTop`, `placeAt`, `jumpTo(place, {
+  inPlace })` (whether it moved), `turnPage` (not `turn`: that is the public one, which syncs
+  first), `jumpToProgress`, `changeFont`, `setTheme`, `goBack`, `putBack`, `followLink`,
+  `contents`, `useContents`, `label`, `progress`, `hasTrail`, `partWord`, `theme`, `fontScale`,
+  `reduced`; each may answer with a promise, which the view waits for. The constructor calls none
+  of them. The place is shared (`_sync`, `jumpTo` in place) once the reader's scrolling rests 250
+  ms, and first before a size, Back, Put back, a turn and a link; the view's own scrolls
+  (`_self`, `_selfTop`) aren't reading. A short screen (`max-height: 420px`) slides the toolbar
+  away (`_headroom`), back on Tab (`focusin`). A part shown waits for the one before (`_showing`).
 - `src/*.d.ts`: generated by `npm run types` and committed.
 - `tools/*.d.mts`: likewise, by `tsconfig.tools.json` (strict, `types: ["node"]`, lib ES2022 without
   the DOM: Node's `fetch` gives `json()` as `unknown`, so a cast where a tool reads one), so a
@@ -163,7 +198,16 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   page, a drag and a tap, the pad taking over and handing back, walks to a point, through the
   doorway, along a route, facing from the first step, with less motion and into a wall, the
   sticks, entering and leaving VR,
-  `setEyeLift`), `chrome.test.js` (the profile's Local State checked without
+  `setEyeLift`), `panel.test.js` (on `canvas.js`: each kind of element drawn, a pointer over a
+  list's row, its scroll bar and a drag, a slider's value, nothing redrawn without a change and
+  `hoverValue` cleared, the ring, a custom element, both sizes, the `Label`), `text-view.test.js`
+  (over `dom.js`, a stand-in DOM grown from outside's `test/helpers/fake-dom.js`: boxes in a
+  scrolling view, a sticky toolbar slid away, scroll events a microtask later, focus, frames and a
+  ResizeObserver; not a test file itself. A subclass over a book of two parts, run once answering
+  at once and once a microtask later, counting each site method: opening and closing at the
+  place, the keys, a rest sharing it, a size, Back and Put back synced first, a theme, a link
+  aimed, `placeAimed`, the parts, the contents and its focus, another book, parts built in turn,
+  the headroom, the TV's methods, the CSS put in once and first), `chrome.test.js` (the profile's Local State checked without
   starting Chrome, `Page` over a stand-in WebSocket; a real Chrome with `CHROME_TEST=1`),
   `serve.test.js` (a temporary site on a free port, and the command), `vendor.test.js` (a temporary
   site: files, folders by extension, optional and required entries, the list's checks, the skip
@@ -193,9 +237,10 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   commit, tag a new version, push, then move each site's tag and run `npm install` there (and the
   `@v…` of its workflow's `uses:`; `test/package.test.js` checks the README names this version).
 - **Imports: three only, by its bare name, and src/'s own.** `door.js`, `nav.js` and `gamepad.js` import nothing
-  and stay pure (but for `localStorage` in `nav.js`); `portal.js`, `fade.js`, `sky.js` and
-  `access.js` import only `three`, which every site maps or bundles, so a vendored copy works in whatever folder it lands.
-  `back-history.js` and `tv.js` import nothing. `controls.js` imports `three`, `./gamepad.js` and
+  and stay pure (but for `localStorage` in `nav.js`); `portal.js`, `fade.js`, `sky.js`,
+  `access.js` and `panel.js` import only `three`, which every site maps or bundles, so a vendored copy works in whatever folder it lands.
+  `back-history.js`, `tv.js` and `text-view.js` import nothing (the text view's CSS is a string in
+  it, not a `.css` file a site's vendor list or build would have to name). `controls.js` imports `three`, `./gamepad.js` and
   `./tv.js`: `src/` goes together (a vendor list names the folder, `server/vendor.js` copies it,
   Vite resolves it in the package), so a module's own beside it is always there. Keep it to
   that: a new module imports `three` and, if it must, its neighbours by `./`, nothing else.

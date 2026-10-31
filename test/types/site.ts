@@ -21,6 +21,10 @@ import { Remote, SPARE_KEYS, focusStops, isTV, keepsKey, keyOf, nextStop, tvMode
 import type { RemoteOptions } from 'common/tv.js';
 import { Controls, KEYS } from 'common/controls.js';
 import type { ControlsOptions, Hand, Hit, How, KeyAction, PadPress } from 'common/controls.js';
+import { Label, Panel, UI, wrapText } from 'common/panel.js';
+import type { ButtonElement, Control, CustomElement, ListElement, ListItem, PanelElement, PanelOptions } from 'common/panel.js';
+import { TEXT_VIEW_CSS, TextView } from 'common/text-view.js';
+import type { ContentsEntry, RenderedPart, TextViewOptions } from 'common/text-view.js';
 
 const visit: Visit = readVisit('?from=hallway&dx=0.12');
 const dx: number | null = visit.dx;
@@ -260,6 +264,151 @@ walking.use(null, 'tv');
 // @ts-expect-error a move that isn't one
 walking.setNav({ move: 'fly', turn: 'snap' });
 
+// A panel in the room: a title, the pieces in a list with a scroll bar, a button, a slider and a
+// piano roll of the site's own, pointed at by where a ray meets it, the row pointed at outlined.
+const panelOptions: PanelOptions = { width: 0.8, height: 0.6, ring: 2 };
+const panel = new Panel(panelOptions);
+const sized = new Panel({ width: 0.8, height: 0.6, px: 1024, background: null });
+panel.add({ type: 'text', id: 'title', x: 40, y: 30, w: 880, h: 60, text: 'Pieces', size: 40, serif: true });
+const items: ListItem[] = [{ label: 'Walden', sub: 'Thoreau', right: '1854', onClick: (it) => walking.walkUpTo(it ? 0 : 1) }];
+const list = panel.add({ type: 'list', id: 'pieces', x: 40, y: 100, w: 880, h: 400, items, rowH: 84, size: 28, serif: true }) as ListElement;
+panel.add({ type: 'button', id: 'close', x: 40, y: 600, w: 200, h: 80, label: 'Close', onClick: (b: ButtonElement) => panel.set(b.id ?? '', { active: true }) });
+panel.add({ type: 'slider', id: 'volume', x: 300, y: 600, w: 400, h: 80, value: 0.5, onClick: (value) => panel.set('volume', { value }) });
+const roll: CustomElement = { type: 'custom', id: 'roll', x: 40, y: 500, w: 880, h: 80, notes: [60, 64, 67], draw: (g, el) => g.fillRect(el.x, el.y, el.w, el.h) };
+panel.add(roll);
+new THREE.Scene().add(panel.mesh, sized.mesh);
+panel.update();
+const there: Control | null = panel.elementAt(0.5, 0.5);
+const lit: boolean = panel.pointerMove(0.5, 0.5);
+const used: boolean = panel.click(0.5, 0.5);
+if (panel.pressAt(0.95, 0.5)) panel.dragTo(0.95, 0.4);
+const released: boolean = panel.release();
+panel.pointerLeave();
+panel.ring = tv ? 4 : 2;
+panel.scrollList('pieces', 3);
+const scrolls: boolean = panel.scrolls(list);
+const drawn: PanelElement[] = panel.elements;
+const label = new Label({ width: 0.4 });
+label.setText('Walden', 'Thoreau');
+label.visible = lit;
+const lines: string[] = wrapText(panel.ctx, 'A line too long for the panel', 300, 2);
+const serif: string = UI.serif;
+panel.dispose();
+
+// @ts-expect-error where a ray meets it is two numbers, not a uv
+panel.click({ x: 0.5, y: 0.5 });
+// @ts-expect-error an element of a type it draws
+panel.add({ type: 'video', x: 0, y: 0, w: 1, h: 1 });
+// @ts-expect-error the outline is a width in pixels
+new Panel({ width: 1, height: 1, ring: true });
+// @ts-expect-error where a ray meets it, in pixels, is its own
+panel._toPx(0.5, 0.5);
+
+// The book's text on a screen: the site's own view, its places { c, b } (vrlbry's: a chunk and a
+// block, f an element the 3D page found), its book its own.
+interface Place {
+  c: number;
+  b: number;
+  f?: string;
+}
+interface Shelf {
+  title: string;
+  chunks: string[][];
+  at: Place;
+  scale: number;
+  theme: string;
+}
+
+class BookView extends TextView<Place> {
+  readonly shelf: Shelf;
+
+  constructor(options: TextViewOptions, shelf: Shelf) {
+    super(options);
+    this.shelf = shelf;
+  }
+
+  bookOpen(): boolean { return this.shelf.chunks.length > 0; }
+  presenting(): boolean { return walking.renderer.xr.isPresenting; }
+  partCount(): number { return this.shelf.chunks.length; }
+  partOf(place: Place): number { return place.c; }
+  partStart(part: number): Place { return { c: part, b: 0 }; }
+
+  async renderPart(body: HTMLElement, part: number, { onLink }: { onLink: (link: unknown) => void }): Promise<RenderedPart> {
+    for (const [b, text] of (this.shelf.chunks[part] ?? []).entries()) {
+      const p = document.createElement('p');
+      p.dataset.b = String(b);
+      p.textContent = text;
+      p.addEventListener('click', () => onLink({ c: part + 1, b: 0 }));
+      body.append(p);
+    }
+    return { title: this.shelf.title, subtitle: part ? `Volume ${part + 1}` : '' };
+  }
+
+  placeShown(): Place { return this.shelf.at; }
+  showsPlace(place: Place): boolean { return place.c === this.shelf.at.c && place.b - (place.b % 2) === this.shelf.at.b; }
+  placeAimed(aim: Place): Place { return aim.f ? this.shelf.at : aim; }
+  placeTop(place: Place): number | null { return this.el.querySelector(`.tv-body [data-b="${place.b}"]`)?.getBoundingClientRect().top ?? null; }
+
+  placeAt(top: number): Place | null {
+    for (const el of this.el.querySelectorAll<HTMLElement>('.tv-body [data-b]')) {
+      if (el.getBoundingClientRect().bottom > top) return { c: this.part, b: Number(el.dataset.b) };
+    }
+    return null;
+  }
+
+  async jumpTo(place: Place, { inPlace }: { inPlace: boolean }): Promise<boolean> {
+    if (this.showsPlace(place)) return false;
+    this.shelf.at = { c: place.c, b: place.b - (place.b % 2) };
+    if (!inPlace) this.follow();
+    return true;
+  }
+
+  turnPage(dir: number): void { this.shelf.at = { ...this.shelf.at, b: Math.max(0, this.shelf.at.b + 2 * dir) }; this.follow(); }
+  changeFont(step: number): void { this.shelf.scale += step / 10; this.follow(); }
+  setTheme(name: string): void { this.shelf.theme = name; this.follow(); }
+
+  async followLink(link: Place): Promise<void> {
+    this.aim(link);
+    await this.jumpTo(link, { inPlace: false });
+  }
+
+  aim(place: Place | null | undefined): void { super.aim(place && { c: place.c, b: place.f ? 0 : place.b, f: place.f }); }
+  contents(): ContentsEntry<Place>[] { return this.shelf.chunks.map((_, c) => ({ title: `Chapter ${c + 1}`, place: { c, b: 0 }, level: 1 })); }
+  label(): string { return `${this.shelf.at.b + 1} / 340`; }
+  theme(): string { return this.shelf.theme; }
+  fontScale(): number { return this.shelf.scale; }
+  reduced(): boolean { return reduce; }
+}
+
+const overlay = document.createElement('div');
+const shelf: Shelf = { title: 'Walden', chunks: [['Economy'], ['Where I lived']], at: { c: 0, b: 0 }, scale: 1, theme: 'paper' };
+const textOptions: TextViewOptions = { root: overlay, tv, step: (h) => Math.max(40, h * 0.75), returnFocus: (away) => (away ? null : overlay), onOpen: () => remote.walk() };
+const reader = new BookView(textOptions, shelf);
+void reader.toggle();
+reader.follow();
+reader.aim({ c: 0, b: 5, f: 'note-3' });
+void reader.turn(1);
+reader.scrollStep(1, true);
+const reading2: boolean = reader.isOpen && reader.tocOpen;
+reader.closeToc();
+const card: HTMLElement = reader.layer();
+const startAt: HTMLElement | null = reader.cardStart() ?? reader.linkHere();
+const inToolbar: boolean = reader.inBar(document.activeElement) && reader.onScreen(overlay);
+void reader.close({ keepPlace: false });
+const css: string = TEXT_VIEW_CSS;
+const partShown: number = reader.part;
+
+// @ts-expect-error a place of the site's own shape
+reader.aim([0, 5, 0]);
+// @ts-expect-error the view goes in an element
+new BookView({ root: '#overlay' }, shelf);
+// @ts-expect-error its place is its own
+reader._at;
+// @ts-expect-error a part's line under its title is text
+const untitled: RenderedPart = { title: 'Walden', subtitle: 2 };
+// @ts-expect-error a turn is a direction
+void reader.turn('next');
+
 // @ts-expect-error motion is one of three
 const sometimes: Access = { ...ACCESS_DEFAULTS, motion: 'sometimes' };
 // @ts-expect-error the vignette moves on with the speed, the turning and whether in VR
@@ -291,4 +440,4 @@ NAV_DEFAULTS.move = 'teleport';
 // @ts-expect-error a view's sizes are numbers
 const depth: string = hung!.depth;
 
-export { dx, views, urls, onward, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects, reduce, stopWatching, kept2, ring, lift, accessKey, sometimes, throughHistory, bookLevel, answering, stepped, intoCard, inCard, next, pointedAt, mouseAt, hands, piece, walkKey };
+export { dx, views, urls, onward, kept, key, sure, fly, depth, normalizeNav, endWindow, hide, state, moved, using, first, dome, glass, sunUp, red, reflects, reduce, stopWatching, kept2, ring, lift, accessKey, sometimes, throughHistory, bookLevel, answering, stepped, intoCard, inCard, next, pointedAt, mouseAt, hands, piece, walkKey, there, used, released, scrolls, drawn, lines, serif, reading2, card, startAt, inToolbar, css, partShown, untitled };

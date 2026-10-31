@@ -22,12 +22,16 @@ environment and how the environment leads them back, and the three.js pieces the
   app's Back and Menu.
 - **[`controls.js`](src/controls.js)**: walking about a site with a mouse, a finger, a gamepad, a
   TV's remote or a headset, for each site's own controls to extend with its room.
+- **[`panel.js`](src/panel.js)**: panels in the 3D view, drawn on a canvas: text, buttons, sliders,
+  lists that scroll, pictures, and elements of a site's own.
+- **[`text-view.js`](src/text-view.js)**: an open book's text as a page on a screen, its place
+  shared with the 3D book, for each site's own view to extend with its book.
 
 These are plain ES modules with JSDoc, with no build step. They run in the browser and in Node,
-for the sites' tests. `portal.js`, `fade.js`, `sky.js`, `access.js` and `controls.js` import three
-by its bare name, from the site (a peer dependency, r154 or later). `controls.js` also imports
-`gamepad.js` and `tv.js` from beside it, and the others import nothing. A `.d.ts` beside each
-module gives TypeScript sites their types.
+for the sites' tests. `portal.js`, `fade.js`, `sky.js`, `access.js`, `controls.js` and `panel.js`
+import three by its bare name, from the site (a peer dependency, r154 or later). `controls.js` also
+imports `gamepad.js` and `tv.js` from beside it, and the others import nothing. A `.d.ts` beside
+each module gives TypeScript sites their types.
 
 Beside them are the tools the sites' Node scripts run, never served to a page, and the workflow
 that publishes them:
@@ -42,8 +46,9 @@ that publishes them:
   workflow, for each site's own to call.
 
 Every site takes what v0.1.0 to v0.4.0 brought from here (breadboard has no sky). The modules,
-tools and workflow of v0.5.0, the TV module of v0.6.0 and the walking controls of v0.7.0 come to
-each site in a change of its own (see [Coming from a site's own copy](#coming-from-a-sites-own-copy)).
+tools and workflow of v0.5.0, the TV module of v0.6.0, the walking controls of v0.7.0 and the
+panels and text view of v0.8.0 come to each site in a change of its own (see
+[Coming from a site's own copy](#coming-from-a-sites-own-copy)).
 [The TV app](#the-tv-app) says what a site in the TV app does.
 
 ## Going in
@@ -896,28 +901,192 @@ The types `Hit`, `Hand`, `How`, `KeyAction`, `PadPress`, `Walk` and `ControlsOpt
 `controls.d.ts`. In TypeScript, `Controls<H extends Hit>` takes a site's own hit:
 `class RoomControls extends Controls<RoomHit>`.
 
+### `panel.js`
+
+Panels in the 3D view: a canvas that textures a plane, with text, buttons, sliders, lists that
+scroll, pictures, rectangles and elements a site draws itself. vrlbry's `public/js/ui/panel.js`
+(at `eb0dfab`), with what outside's copy (its `canvas-panel.js` at `fadc2e1`) and music's
+(`e665a2e`) add. A ray meets it at a uv (u and v from 0 to 1, from its bottom left), so one panel
+works with a mouse, a finger, a gamepad's dot, a TV's remote and a VR controller: the site's
+`castRay` finds the uv, and the panel what is there. A ray over it allocates nothing, and it is
+drawn again only when something on it changes, never each frame.
+
+```js
+import { Panel } from 'common/panel.js';
+
+const panel = new Panel({ width: 0.8, height: 0.6, ring: 2 });   // 960 × 720 px
+scene.add(panel.mesh);
+panel.add({ type: 'text', x: 40, y: 30, w: 880, h: 60, text: 'Settings', size: 40, serif: true });
+panel.add({ type: 'list', id: 'books', x: 40, y: 110, w: 880, h: 480, rowH: 84,
+  items: books.map((b) => ({ label: b.title, sub: b.author, onClick: () => open(b) })) });
+panel.add({ type: 'slider', id: 'volume', x: 40, y: 620, w: 600, h: 72, value: 0.5, onClick: (v) => setVolume(v) });
+panel.add({ type: 'button', id: 'close', x: 680, y: 620, w: 240, h: 72, label: 'Close', onClick: () => hide() });
+
+panel.update();                                  // each frame: drawn again only if something changed
+const lit = panel.pointerMove(hit.u, hit.v);     // where the site's ray meets it: what could be used is lit
+panel.click(hit.u, hit.v);                       // a click, a tap, A, OK or a trigger
+if (panel.pressAt(hit.u, hit.v)) held = true;    // a scroll bar's thumb taken: dragTo(u, v) while held, then release()
+panel.pointerLeave();
+panel.set('volume', { value: 0.7 });             // drawn again only when a field is new
+```
+
+| Element (`type`) | |
+|---|---|
+| `text` | `text` in the lines that fit `w` (and as many as fit `h`, or `maxLines`, the last with an ellipsis), `size` pixels high (34), with `serif`, `weight`, `color`, `align` and `valign: 'middle'`. |
+| `button` | `label` on one line, lit while pointed at and drawn pressed while `active`; `onClick(el)`. |
+| `slider` | `value` 0…1 from its left. Used, it takes the value there and calls `onClick(value, el)`; pointed at, a line shows where (`hoverValue`). |
+| `list` | `items` (`{ label, sub?, right?, weight?, indent?, active?, disabled?, onClick? }`) in rows `rowH` high (64), from row `scroll`, in the list's `size` and face (`serif`). With more than fit, a scroll bar at its right: ▲ and ▼ a page each, the track a page towards the press, and a thumb to drag. |
+| `image` | A picture (an image, a canvas or a bitmap) as large as fits, in the middle, with a shadow; a placeholder until it has a size. |
+| `rect` | A rectangle of `color`, its corners rounded by `radius`. |
+| `custom` | `draw(g, el)` each time the panel is drawn, such as music's piano roll; its other fields are the site's. |
+
+Every element has its box, `x`, `y`, `w` and `h` in the canvas's pixels from its top left, and may
+have an `id` (for `get`, `set` and `remove`) and be `hidden`. A button, a slider and a list can be
+`disabled`.
+
+| Export | |
+|---|---|
+| `new Panel({ width, height, pxPerMeter?, px?, background?, radius?, anisotropy?, ring?, canvas? })` | `width` × `height` where it is put, in metres. Its canvas is `pxPerMeter` (1200) pixels to the metre, at most 2048 a side (vrlbry's), or `px` wide (outside's), its height in proportion. `ring` is the width in pixels of the outline round the list row pointed at: 0 for none, as vrlbry's has it (outside's is 2, music's 4 on a TV). `canvas(w, h)` makes its canvas, a stand-in in Node. |
+| `mesh`, `material`, `texture`, `canvas`, `ctx`, `w`, `h` | The plane, drawn after the scene (`renderOrder` 10), and what it is drawn with; `w` × `h` are the canvas's pixels, which the boxes are in. |
+| `add(el)`, `get(id)`, `set(id, fields)`, `remove(id)`, `clear()`, `elements` | What is on it, drawn in the order added. `set` marks it to be drawn again only when a field is new. A scroll bar being dragged carries on through `clear()` on the list added again with its id. |
+| `update()`, `markDirty()`, `redraw()` | Drawn again on the next `update()` (once a frame) after a change; `redraw()` draws it at once. |
+| `elementAt(u, v)` | The button, slider or list (on an item not disabled, or on its scroll bar) that can be used there, or null. |
+| `pointerMove(u, v)`, `pointerLeave()`, `hover` | What is there lit (a list's row, a slider's value), and whether it could be used; leaving clears it. |
+| `click(u, v)` | Uses what is there: a button, a slider's value, a list's item, or a page of its scroll bar. Whether something was used. |
+| `pressAt(u, v)`, `dragTo(u, v)`, `release()`, `dragging` | A scroll bar's thumb dragged. `pressAt` is true when it took the press, and `dragTo` follows a ray that has left the bar. |
+| `scrollList(id, rows)`, `scrollBy(list, rows)`, `scrolls(list)` | A list scrolled within its ends, and whether it has more than it shows. |
+| `visible`, `dispose()` | Shown or hidden (hidden, nothing is lit), and its geometry, material and texture let go of. |
+| `new Label({ width?, height?, pxPerMeter?, canvas? })` | A line or two in front of what is behind it (a tooltip, a hint, a notice): `setText(title, sub?)`, drawn again only on a change. |
+| `wrapText(g, text, width, maxLines?)` | The lines of `text` that fit, at `g`'s font. |
+| `UI` | Its faces and colours, for a site's own drawing to match. |
+
+The types `PanelOptions`, `PanelElement`, `ListItem`, `CustomElement` and the rest are in
+`panel.d.ts`.
+
+### `text-view.js`
+
+The open book's text as a page on a screen, over the 3D view, for a screen reader, the keyboard,
+zoom and phones: vrlbry's `public/js/ui/text-view.js` (at `eb0dfab`) without its book, with what
+outside's copy (`fadc2e1`) and music's (`e665a2e`) add. The 3D book stays where the reader's place
+is. The view opens there, keeps up with the book's pages as they turn, and closes leaving the book
+open at the place at the top of the view. Its header is the reader's toolbar: the parts before and
+after, Contents, the text size, the theme, where the reader is (a slider), Back and Put back. A
+site's own `TextView` extends it with its book.
+
+| | |
+|---|---|
+| The keys | Esc closes its contents, else the view; T closes the view. ← and → turn the 3D book's pages, from the reader's place. A field (the slider, the theme) keeps its own keys, and a key with Ctrl, Meta or Alt is the page's. The view has `data-own-keys`, so the walking controls leave its keys to it. |
+| The place | The view keeps the place it shows. Once the reader's scrolling rests a quarter of a second, the place at its top is shared: the 3D book jumps there in place (`jumpTo(place, { inPlace: true })`). A size, Back, Put back, a turn and a link bring the book there first. The view's own scrolls, to a place it shows, aren't reading. |
+| Opening | At the 3D book's place, or at the view's own while the book still shows it (closed and opened again). A frame on, once it is drawn, at its place again, unless the reader has scrolled. Not in VR, and not without a book. |
+| A short screen | At 420 px high or less (a phone held sideways, 400% zoom), the toolbar slides away while the reader reads down, and comes back when they read up, jump, or reach it with Tab, the text staying at their place. `--tv-bar-h`, kept at the toolbar's height, stops what Tab and a jump scroll to below it. |
+| A TV | With `tv`, the view holds the remote's focus while reading: ↑ and ↓ scroll it by `step`, and the toolbar and the links are the card the site's remote goes into. A remote that leaves the focus on the 3D view calls `turn(side)` and `scrollStep(dir)` instead. |
+| Themes | Paper, sepia and night, each with its `color-scheme` (night's is `dark`), and the text's size, as the 3D book has them. |
+
+Its CSS is in the module (`TEXT_VIEW_CSS`): the shell's rules for the themes, the toolbar, the
+contents, the column, the title, the parts and the focus rings. The first view in a page puts it in
+a `<style id="tv-view-style">` first in `<head>`, so the site's own `style.css` overrides it. The
+text's own rules (`.tv-body` and what is in it) stay in the sites, with what their parts are made
+of. A `.css` file would need every site's vendor list or build changed: outside's list copies only
+`common/src`'s `.js` files, and vrlbry's build only what the page imports.
+
+```js
+import { TextView } from 'common/text-view.js';
+
+/** The library's: a place is { c, b }, a chunk and a block in it. */
+class BookView extends TextView {
+  constructor({ library, ...options }) {
+    super(options);
+    this.library = library; // after super(): common's constructor calls none of the methods below
+  }
+
+  bookOpen() { return !!this.library.book; }
+  presenting() { return this.library.renderer.xr.isPresenting; }
+  partCount() { return this.library.book.chunks; }
+  partOf(place) { return place.c; }
+  partStart(c) { return { c, b: 0 }; }
+  async renderPart(body, c, { onLink }) {
+    const chunk = await this.library.getChunk(c);
+    renderBlocks(body, chunk.blocks, onLink);      // as text, never as HTML; a link's click: onLink(to)
+    return { title: chunk.title ?? this.library.book.title };
+  }
+  placeShown() { return this.library.place(); }
+  showsPlace(place) { return this.library.shows(place); }
+  placeTop({ b }) { return this.$('.tv-body').querySelector(`[data-b="${b}"]`)?.getBoundingClientRect().top ?? null; }
+  placeAt(top) { return topBlock(this.$('.tv-body'), top, this.part); }
+  jumpTo(place, { inPlace }) { return this.library.jumpTo(place, { inPlace }); }
+  turnPage(dir) { return this.library.turn(dir); }
+  // … and the rest the site gives, below
+}
+
+const textView = new BookView({ root: overlay, library, tv, returnFocus: (away) => (away ? readButton : textButton) });
+library.onShow = () => textView.follow();        // after every turn or jump of the 3D book
+textButton.addEventListener('click', () => textView.toggle());
+renderer.xr.addEventListener('sessionstart', () => textView.close());
+```
+
+**What a site gives it** are methods its subclass overrides, named as vrlbry's are where it has
+them. A place is the site's own (vrlbry's `{ c, b }`, with `f` for an element a link leads to, and
+outside's `[s, b, w]`): the view keeps one and hands it back, and never reads it. Each method may
+answer at once or with a promise, and the view waits for it, so vrlbry's book, which fetches its
+parts, and outside's, which answers at once, both fit. A part being shown waits for the one before.
+
+| Method | Common's | The site's |
+|---|---|---|
+| `bookOpen()`, `presenting()` | false, false | Whether a book is open (in VR too, so that `close` shares its place), and whether in VR, where the view doesn't open. |
+| `bookKey()` | null | Which book is open, compared with `===`. When it changes, the part is built again, the contents filled again and the view's place forgotten. |
+| `partCount()`, `partOf(place)`, `partStart(part)` | 1, 0, null | The parts (vrlbry's chunks; outside's title page, pieces and sources), the one a place is in, and where each begins. |
+| `renderPart(body, part, { onLink })` | `{}` | The part built into `body`, its text as text, never as HTML; each link's click calls `onLink(to)`. Returns `{ title, subtitle }`, the view's heading and the line under it (hidden when empty). vrlbry's lets go of the last part's pictures here. |
+| `placeShown()` | null | The 3D book's place: where the view opens and what it follows. |
+| `showsPlace(place)` | false | Whether the book's open pages show a place: while they do, the view opens again at its own. |
+| `placeAimed(aim)` | `aim` | What the view shows for a place aimed at, once the book has gone there. vrlbry's shows its page's place for an element the 3D page found. |
+| `placeTop(place)` | null | Where in the view a place is (a `getBoundingClientRect()` top), to put it just below the toolbar; null for the part's top. vrlbry's finds its block, outside's the line with its word. |
+| `placeAt(top)` | null | The place at the view's top, `top` being the toolbar's foot: vrlbry's `topBlock`, and outside's with the first word in sight. |
+| `jumpTo(place, { inPlace })` | false | The 3D book to a place, and whether it moved (a spread showing it already doesn't). |
+| `turnPage(dir)`, `jumpToProgress(f)`, `changeFont(step)`, `setTheme(name)`, `goBack()`, `putBack()`, `followLink(to)` | nothing | The book's actions. `putBack` closes the view, with `close({ keepPlace: false })`. `followLink` calls `aim(to)` while the book goes there. |
+| `contents()`, `useContents(entry)` | `[]`, to `entry.place` | The contents, each `{ title, place, level?, after?, href? }` (vrlbry's by level, outside's pieces with their authors after them), and going to one. |
+| `label()`, `progress()`, `hasTrail()`, `partWord()` | `''`, 0, false, `'part'` | The header: where the reader is ("12 / 340", which the slider says as "Page 12 of 340"), how far through (0…1), whether Back has a link to go back along, and what a part is called (`'article'` in a Wikipedia volume). |
+| `theme()`, `fontScale()`, `reduced()` | `'paper'`, 1, false | The theme, the text's size and less motion (no smooth scrolls, the toolbar not sliding), as the 3D book has them. |
+
+| Export | |
+|---|---|
+| `new TextView({ root, tv?, step?, returnFocus?, onOpen?, onClose? })` | The view in `root`, the overlay. `step(height)` is how far ↑ ↓ and `scrollStep` go, for the height shown below the toolbar: 0.4 of it by default, as vrlbry and music have it; outside's is `(h) => Math.max(40, h * 0.75)`. `returnFocus(away)` says where the focus goes as it closes (`away`: the book is being put back). `onOpen()` once it is open and has the focus, and `onClose()` once it has closed with the book still open. |
+| `open()`, `close({ keepPlace = true })`, `toggle()`, `isOpen` | As above. `close` in VR still shares the place. |
+| `follow()` | After every turn or jump of the 3D book: the view goes with it. |
+| `aim(place)` | Before a jump to a place the view should show (a link, Back, the contents) rather than the 3D page's first; `aim(null)` after. A site that cleans up its places does so here and calls `super`. |
+| `turn(side)`, `scrollStep(dir, repeat?)` | ← and →, from the reader's place, and ↑ and ↓ on a TV (a key held, `repeat`, without a smooth scroll each). |
+| `tocOpen`, `closeToc()`, `layer()`, `cardStart()`, `linkHere()`, `inBar(el)`, `onScreen(el)` | For a TV's remote: the contents open, and closed; the card (the contents when open, else the view); the toolbar's control Menu comes to (the one used last, else the first that can be used); the first link on the screen; whether a control is in the toolbar; and whether an element is on the screen, below the toolbar. |
+| `el`, `$(selector)`, `part` | The view (`article.tv-view`), one of its elements, and the part shown (-1 for none). |
+| `TEXT_VIEW_CSS` | The shell's rules. |
+
+The members with an underscore that a subclass may call are `protected` in `text-view.d.ts`:
+`_sync()` (the book brought to the reader's place), `_goTo(place)`, `_show(place)`, `_header()`,
+`_style()`, `_toggleToc(show)`, `_home()` and `_barH()`. In TypeScript, `TextView<P>` takes a
+site's own place: `class BookView extends TextView<Place>`. The types `TextViewOptions`,
+`RenderedPart` and `ContentsEntry` are in `text-view.d.ts`.
+
 ## Using it
 
 Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.7.1",
+  "common": "github:AriaMoKr/common#v0.8.0",
   "three": "0.186.1"
 }
 ```
 
 The package holds `src/` (the modules and their `.d.ts` files), `tools/`, the license and this
 README. It has no dependencies of its own and runs nothing on install. three is a peer dependency
-(`>=0.154.0`): `portal.js`, `fade.js`, `sky.js`, `access.js` and `controls.js` use the site's own,
-so a page has one three. In Node the modules import as `common/door.js` and so on, for a site's
+(`>=0.154.0`): `portal.js`, `fade.js`, `sky.js`, `access.js`, `controls.js` and `panel.js` use the
+site's own, so a page has one three. In Node the modules import as `common/door.js` and so on, for a site's
 tests, and the tools as `common/tools/serve.mjs` and so on. To take a new version, move the tag in
 package.json and run `npm install`. Each version so far only adds. v0.6.1 changes only the remote in
 the card (its text boxes, and where Menu lands), v0.6.2 adds its `forget()`, and both leave the
 modules of v0.1.0 to v0.5.0 as they were. v0.6.3 adds `hallLink` to `door.js`, for a hall other
 than the Hallway. v0.7.0 adds `controls.js` and changes no other module, so a site can move to it
 before it takes the controls. v0.7.1 adds `_startWalk`'s `turn`, and corrects the notes on moving
-a site's own controls to it.
+a site's own controls to it. v0.8.0 adds `panel.js` and `text-view.js`, and the tools' types, and
+changes no other module.
 
 `src/` goes together: `controls.js` imports `./gamepad.js` and `./tv.js` from beside it, so each
 way below copies or serves the whole folder, and a vendored copy works wherever it lands.
@@ -944,7 +1113,8 @@ and the page's import map maps the name to the copy:
 ```
 
 Then a module imports `common/door.js`, in the browser and in Node alike. The import map already
-maps `three`, which `portal.js`, `fade.js`, `sky.js`, `access.js` and `controls.js` import.
+maps `three`, which `portal.js`, `fade.js`, `sky.js`, `access.js`, `controls.js` and `panel.js`
+import.
 
 ### `server/vendor.js` (vrlbry, music)
 
@@ -960,10 +1130,10 @@ The client names its modules by relative URL, as it does layersharedsession's:
 import { wayBack } from '../vendor/common/door.js';
 ```
 
-`door.js`, `nav.js`, `gamepad.js`, `back-history.js` and `tv.js` import nothing. `portal.js`,
-`fade.js`, `sky.js`, `access.js` and `controls.js` import `three` by its bare name, which the
-page's import map maps, as it does for layersharedsession's `avatars.js`, and `controls.js` its
-neighbours by relative URL. So `BARE` needs no entries, and they are for the page, not a worker,
+`door.js`, `nav.js`, `gamepad.js`, `back-history.js`, `tv.js` and `text-view.js` import nothing.
+`portal.js`, `fade.js`, `sky.js`, `access.js`, `controls.js` and `panel.js` import `three` by its
+bare name, which the page's import map maps, as it does for layersharedsession's `avatars.js`, and
+`controls.js` its neighbours by relative URL. So `BARE` needs no entries, and they are for the page, not a worker,
 which has no import map.
 `tools/build-pages.mjs` copies them into the published site with the rest of what the client
 imports. Tests in Node import `common/door.js` and so on.
@@ -971,7 +1141,7 @@ imports. Tests in Node import `common/door.js` and so on.
 ### Vite (breadboard)
 
 Import it by name. Vite resolves it through the package's `exports` and bundles it, with the
-site's own three for `portal.js`, `fade.js`, `sky.js`, `access.js` and `controls.js`:
+site's own three for `portal.js`, `fade.js`, `sky.js`, `access.js`, `controls.js` and `panel.js`:
 
 ```ts
 import { readVisit, wayBack, type WayBack } from 'common/door.js';
@@ -983,8 +1153,8 @@ import { Remote, keyOf, tvMode, type RemoteOptions } from 'common/tv.js';
 
 TypeScript, with `moduleResolution: "bundler"`, reads the `.d.ts` beside each module, so no
 declarations of the site's own are needed (`test/types/` compiles a file the way breadboard's
-tsconfig does). `portal.d.ts`, `fade.d.ts`, `sky.d.ts` and `access.d.ts` refer to three's types, from the site's
-`@types/three`.
+tsconfig does). `portal.d.ts`, `fade.d.ts`, `sky.d.ts`, `access.d.ts`, `controls.d.ts` and
+`panel.d.ts` refer to three's types, from the site's `@types/three`.
 
 ## The tools
 
@@ -1159,14 +1329,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.7.1
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.0
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.7.1
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.0
     with:
       build: npm run build
       path: dist
@@ -1385,6 +1555,73 @@ change of its own: the template and the hallway first, then art, video and outsi
   - `aimMiddle` while reading is for `main.js` to clear.
   - With less motion, the jump is common's: to the walk's end, walled in there.
 
+**The text view and the 3D panel (v0.8.0).** vrlbry's view and panel have two more copies each:
+music's, by merge, and outside's, copied and cut down. Each site's view becomes a subclass of
+common's `TextView` ([`text-view.js`](#text-viewjs)), and its panels common's `Panel`
+([`panel.js`](#paneljs)), in a change of its own: vrlbry and outside next, then music by merge.
+Both were tried in copies (vrlbry at `eb0dfab`, outside at `fadc2e1`) as below. Their tests pass,
+and each view opens and closes at its place, keeps it through a size and a theme, and works with
+`?tv=emulate`. Their panels work by pointer and, with `?xr=emulate`, by a controller.
+
+- **vrlbry** (`public/js/ui/text-view.js` and `ui/panel.js`):
+  - `ui/panel.js` goes. `interaction.js` imports `Label`, `Panel` and `UI` from
+    `../vendor/common/panel.js`, and the two comments in `xr/controls.js` that name it point there.
+  - Its calls with a `uv` take `u, v`: `pressAt(hit.uv.x, hit.uv.y)`, and likewise `click`,
+    `pointerMove` and `dragTo`. `test/client-panel.test.js` imports common's (after
+    `helpers/vendor.js`), its `at()` giving `[u, v]`.
+  - `ui/text-view.js` keeps its pure exports (`renderBlocks`, `runsText`, `topBlock` and the rest),
+    and its `TextView` extends common's, its constructor as now. It keeps the library's own:
+    `bookInHand`, `openOnRead`, `bookOpened`, `bookClosing`, the Wikipedia titles and its pictures,
+    let go of as a part goes.
+  - What it gives the shell goes through `interaction`: `renderPart` on `getChunk` and
+    `renderBlocks`, `placeAt` on `topBlock`, `placeAimed` for a link to an element the 3D page
+    found, `contents()` from `reader.meta.toc`, and the book's actions. Its `turn(dir)`, the 3D
+    book's, is `turnPage(dir)`: common's `turn(side)` brings the book to the reader's place first.
+  - `style.css` loses the shell's rules, which are `TEXT_VIEW_CSS` now: the themes, the toolbar and
+    `.tv-away`, the contents, the column, the title, the parts, the focus rings, `.tv-wide`, and
+    the narrow screen's. `test/client-text-view.test.js` checks the themes against `TEXT_VIEW_CSS`.
+    The text's own rules stay, and `html.tv`'s.
+  - What is new to it:
+    - each theme's `color-scheme`, `dark` at night;
+    - the view put at its place again a frame after it opens;
+    - A− and A+ named "A− smaller text" and "A+ larger text", as music has them;
+    - outside's panel: nothing allocated per ray, `set` drawing again only on a change, and
+      `pointerLeave` clearing a slider's `hoverValue`;
+    - a click below a list's last full row uses nothing. It used to use the item after it, which
+      isn't drawn.
+
+  `ring` is 0, so its lists look as now.
+- **music**, by merge: as vrlbry. Its sounds stay. Its ring on a TV is a width now: `ring = 4`
+  where it sets `true`. Its own elements are `custom`, drawn by `el.draw(g, el)` as now.
+- **outside** (`public/js/text-view.js` and `canvas-panel.js`):
+  - `canvas-panel.js` goes. `book.js` and `controls.js` import `Panel` and `UI`, and the types, from
+    `common/panel.js`. The contents panel is made with `ring: 2`, its outline as now.
+  - Its list draws vrlbry's way. A row's second line is 0.72 of the list's size, in the list's face
+    (0.66, in the UI's, now). The right column is 140 px wide, in the row's middle (90 px, on the
+    first line, now). So a long piece's title is cut about 50 px sooner in the contents ("I
+    wandered lonely as a…").
+  - `text-view.js` keeps its pure functions (`renderPart`, `partOf`, `partSections`, `topBlock`,
+    `wordStarts` and the rest). Its `TextView` extends common's: its constructor as now, with
+    `step: (h) => Math.max(40, h * 0.75)`, and "Put the book down" for Put back.
+  - It keeps the book's words:
+    - `placeTop` finds the line with a place's word, and `placeAt` adds the first word in sight;
+    - `followLink` aims at a piece's start;
+    - `contents()` gives the pieces with their authors after them, and `useContents` closes the 3D
+      contents first.
+  - These are renamed: `contentsOpen` is `tocOpen`, and `closeContents()` is `closeToc()`
+    (`main.js`'s remote).
+  - `style.css` loses the shell's rules for `TEXT_VIEW_CSS`. It keeps the garden's faces over them
+    (the view in `--serif`, its toolbar, contents and parts in `--font`) and the text's own rules.
+  - `test/text-view.test.js` finds the view's class in common's shell, and `test/reader.test.js`
+    checks the themes against `TEXT_VIEW_CSS`.
+  - `types/node/common-tools.d.ts` goes: the tools have their own types now (`tools/*.d.mts`).
+  - What is new to it:
+    - the headroom: on a short screen the toolbar slides away while the reader reads down (87 px
+      of 256 at 320 × 256);
+    - A− and A+ named "A− smaller text" and "A+ larger text";
+    - the view opens again at its own place while the 3D book still shows it;
+    - Put back brings the book to the reader's place first.
+
 ## Developing
 
 ```bash
@@ -1415,6 +1652,13 @@ The walking controls are tested in Node over stand-ins (`test/controls.test.js`)
 camera, rig and controllers need no WebGL. Beside them are a renderer whose `xr` gives the
 controllers and the session's events, a view that takes pointer events, the window's keys, a
 gamepad, and a box of a room as a site's subclass, counting each of its methods called.
+
+The panels are drawn on a stand-in canvas (`test/canvas.js`) whose calls are read back: each kind
+of element, a pointer over each, and nothing drawn again without a change (`test/panel.test.js`).
+The text view is tested over a stand-in DOM (`test/dom.js`: boxes laid out in a view that scrolls,
+a sticky toolbar, scroll events a moment later, and the focus), as a site's subclass over a book of
+two parts, one that answers at once and one that answers later, counting each of its methods
+called (`test/text-view.test.js`).
 
 The sky is outside's picture, call for call: `test/sky.test.js` paints it on a stand-in canvas
 (`test/canvas.js`, which records every call) and checks its fingerprint against the one outside's

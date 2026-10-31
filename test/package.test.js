@@ -41,6 +41,7 @@ describe('the package', () => {
       'access.js': ['three'],
       'controls.js': ['three', './gamepad.js', './tv.js'],
       'fade.js': ['three'],
+      'panel.js': ['three'],
       'portal.js': ['three'],
       'sky.js': ['three'],
     };
