@@ -990,7 +990,9 @@ tsconfig does). `portal.d.ts`, `fade.d.ts`, `sky.d.ts` and `access.d.ts` refer t
 
 Node scripts the sites run, as `common/tools/…`. They import only Node's own modules, so a site
 needs nothing else installed to run them, and they never reach a page: a site's vendor list names
-`common/src`, not `common/tools`.
+`common/src`, not `common/tools`. A `.d.mts` beside each, made from its JSDoc with Node's types,
+types it for a site's own tools that TypeScript checks (outside's `tsconfig.node.json`), without
+declarations of the site's own.
 
 ### `tools/chrome.mjs`
 
@@ -1386,17 +1388,20 @@ change of its own: the template and the hallway first, then art, video and outsi
 ## Developing
 
 ```bash
-npm install     # TypeScript, for the .d.ts files; three and @types/three, for the tests and the types
+npm install     # TypeScript, for the .d.ts files; three, @types/three and @types/node, for the tests and the types
 npm test        # node --test "test/*.test.js": the portal, the fade, the sky and the vignette are built in Node, no WebGL
-npm run types   # src/*.d.ts from the JSDoc
+npm run types   # src/*.d.ts and tools/*.d.mts from the JSDoc
 CHROME_TEST=1 npm test   # and start a real Chrome, through launchChrome, on a served page
 ```
 
 The `.d.ts` files are made from the JSDoc and committed. After changing a module's JSDoc, run
 `npm run types` and commit them with it: a test fails while they are stale. It removes the old ones
 first, since TypeScript would read `controls.js`'s imports from them, and then refuses to write
-over what it reads. The tools have JSDoc but no `.d.ts`: the sites' scripts that run them are
-JavaScript.
+over what it reads. The tools' `.d.mts` files are made the same way, with Node's types
+(`tsconfig.tools.json`, and `@types/node` of Node 22, the oldest the package's engines allow).
+With them, a site's own `tools/` in JavaScript, which TypeScript checks as outside's are, needs no
+declarations of its own: `test/types/tools.mjs` is such a tool, and what it reads of common's
+tools is their `.d.mts` files alone.
 
 The tools are tested in temporary folders: the server on a free port, the vendor copy in a
 stand-in site (and from this package itself, to check only `src/` goes), and Chrome's profile

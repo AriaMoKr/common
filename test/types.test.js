@@ -33,6 +33,21 @@ describe('the types', { skip: tsc ? false : 'TypeScript is not installed (npm in
     }
   });
 
+  it('and the tools\' .d.mts files, with Node\'s types', () => {
+    const out = mkdtempSync(join(tmpdir(), 'common-types-'));
+    try {
+      run('-p', 'tsconfig.tools.json', '--outDir', out);
+      const made = readdirSync(out).sort();
+      assert.deepEqual(made, readdirSync(join(root, 'tools')).filter((f) => f.endsWith('.d.mts')).sort());
+      assert.deepEqual(made, ['chrome.d.mts', 'serve.d.mts', 'vendor.d.mts']);
+      for (const f of made) {
+        assert.equal(readFileSync(join(root, 'tools', f), 'utf8'), readFileSync(join(out, f), 'utf8'), `tools/${f} is stale: npm run types`);
+      }
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
+  });
+
   it('type a site in TypeScript, set up as breadboard is (Vite: bundler resolution, strict)', () => {
     assert.ok(existsSync(join(root, 'test', 'types', 'tsconfig.json')));
     try {
@@ -40,5 +55,19 @@ describe('the types', { skip: tsc ? false : 'TypeScript is not installed (npm in
     } catch (e) {
       assert.fail(`tsc -p test/types/tsconfig.json\n${e.stdout}${e.stderr}`);
     }
+  });
+
+  it('type a site\'s tools in JavaScript, checked as outside\'s are (checkJs, strict, Node\'s types), from the .d.mts files alone', () => {
+    try {
+      run('-p', 'test/types/tsconfig.tools.json');
+    } catch (e) {
+      assert.fail(`tsc -p test/types/tsconfig.tools.json\n${e.stdout}${e.stderr}`);
+    }
+    // What it read of common's tools: their declarations, not their source, as a site reads them
+    // under its node_modules, where TypeScript reads no JavaScript.
+    const tools = `${root.replace(/\\/g, '/').replace(/\/$/, '')}/tools/`.toLowerCase();
+    const files = run('-p', 'test/types/tsconfig.tools.json', '--listFilesOnly').split(/\r?\n/).map((f) => f.replace(/\\/g, '/'));
+    const read = files.filter((f) => f.toLowerCase().startsWith(tools)).map((f) => f.slice(f.lastIndexOf('/') + 1)).sort();
+    assert.deepEqual(read, ['chrome.d.mts', 'serve.d.mts', 'vendor.d.mts']);
   });
 });

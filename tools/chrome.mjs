@@ -16,7 +16,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-/** @param {number} ms */
+/** @type {(ms: number) => Promise<void>} */
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** @type {Record<string, string[]>} */
@@ -132,7 +132,7 @@ export async function launchChrome({ headless = true, args = [], url = 'about:bl
     profile,
     process: proc,
     async newPage() {
-      const target = await (await fetch(`${endpoint}/json/new?about:blank`, { method: 'PUT' })).json();
+      const target = /** @type {{ webSocketDebuggerUrl: string }} */ (await (await fetch(`${endpoint}/json/new?about:blank`, { method: 'PUT' })).json()); // the tab DevTools opened
       return Page.connect(target.webSocketDebuggerUrl);
     },
     async close() {

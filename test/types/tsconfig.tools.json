@@ -1,0 +1,17 @@
+{
+  // A site's tools in JavaScript, which run in Node, using common's tools by their names, checked as
+  // outside's tsconfig.node.json checks its tools/ (checkJs, strict, Node's types beside the DOM's):
+  // the .d.mts files beside common's tools are all it needs. test/types.test.js runs it.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "files": ["tools.mjs"]
+}

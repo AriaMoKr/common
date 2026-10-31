@@ -23,15 +23,16 @@ describe('the package', () => {
     for (const t of tools) assert.equal(await import(`${pkg.name}/tools/${t}`), await import(`../tools/${t}`), t);
   });
 
-  it('has a .d.ts beside each module, for sites in TypeScript', () => {
+  it('has a .d.ts beside each module, for sites in TypeScript, and a .d.mts beside each tool, for their tools', () => {
     for (const m of modules) assert.ok(existsSync(new URL(`../src/${m.replace(/\.js$/, '.d.ts')}`, import.meta.url)), m);
+    for (const t of tools) assert.ok(existsSync(new URL(`../tools/${t.replace(/\.mjs$/, '.d.mts')}`, import.meta.url)), t);
   });
 
   it('runs nothing on install, and needs only the site\'s three at run time', () => {
     assert.equal(pkg.dependencies, undefined);
     for (const s of ['preinstall', 'install', 'postinstall', 'prepare', 'prepack']) assert.equal(pkg.scripts[s], undefined, s);
     assert.deepEqual(pkg.peerDependencies, { three: '>=0.154.0' });
-    assert.deepEqual(Object.keys(pkg.devDependencies), ['@types/three', 'three', 'typescript']);
+    assert.deepEqual(Object.keys(pkg.devDependencies), ['@types/node', '@types/three', 'three', 'typescript']);
   });
 
   it('imports only three, by its bare name, and its own modules beside it, so a vendored copy works wherever it is put', () => {

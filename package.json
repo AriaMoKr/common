@@ -39,12 +39,13 @@
   ],
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
-    "types": "node -e \"for (const f of require('fs').readdirSync('src')) if (f.endsWith('.d.ts')) require('fs').rmSync('src/' + f)\" && tsc -p tsconfig.json"
+    "types": "node -e \"for (const d of ['src', 'tools']) for (const f of require('fs').readdirSync(d)) if (f.endsWith('.d.ts') || f.endsWith('.d.mts')) require('fs').rmSync(d + '/' + f)\" && tsc -p tsconfig.json && tsc -p tsconfig.tools.json"
   },
   "peerDependencies": {
     "three": ">=0.154.0"
   },
   "devDependencies": {
+    "@types/node": "22.20.5",
     "@types/three": "0.186.0",
     "three": "0.186.1",
     "typescript": "5.9.3"

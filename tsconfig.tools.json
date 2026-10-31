@@ -1,0 +1,21 @@
+{
+  // `npm run types`, after tsconfig.json: a .d.mts beside each tool in tools/, from its JSDoc, with
+  // Node's types (@types/node, of Node 22, the oldest engines allows), so that a site's own tools/
+  // type-check without declarations of their own. Committed, as src/'s are; test/types.test.js
+  // checks they are current.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "strict": true,
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "skipLibCheck": true,
+    "newLine": "lf"
+  },
+  "include": ["tools/*.mjs"]
+}
