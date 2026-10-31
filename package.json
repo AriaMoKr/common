@@ -1,7 +1,7 @@
 {
   "name": "common",
   "version": "0.8.0",
-  "description": "Code shared by the sites behind the Hallway's doors: the door contract (a door's link, the way back, the view from it), walking controls, VR and accessibility settings, a three.js doorway, fade, comfort vignette, gamepad, sky and panels, a book's text view and its browser's Back, the TV's remote, and their dev server, vendor copy, Chrome launcher and Pages workflow.",
+  "description": "Code shared by the sites behind the Hallway's doors: the door contract (a door's link, the way back, the view from it), walking controls, VR and accessibility settings, a three.js doorway, fade, gamepad, sky and panels, a book's text view and browser Back, the TV's remote, and their dev server, vendor copy, Chrome launcher and Pages workflow.",
   "keywords": ["webxr", "threejs", "hallway", "portal", "deep-link", "controls", "gamepad", "sky", "panel", "text-view", "accessibility", "history", "tv", "devtools", "github-pages"],
   "homepage": "https://github.com/AriaMoKr/common#readme",
   "repository": {
