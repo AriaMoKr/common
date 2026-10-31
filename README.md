@@ -1355,6 +1355,7 @@ change of its own: the template and the hallway first, then art, video and outsi
     for those (its `route` ends at the nearest place one can stand) before `super.use`, which
     walks only to `walkable` ground;
   - its `walkInto` and `resetTo`;
+  - the control panel: `onPanel`, `hoverPanel` and `_press`;
   - the bench: `sit`, `_seat`, `seated`, `onSeat` and `onBench`, and `stand()`, which now says
     whether one got up and, in VR, puts the book down first, as the stick and a teleport did;
   - the seat's height, by overriding `_standOnGround`, and two guards on it:
