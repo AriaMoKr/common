@@ -97,7 +97,9 @@ export class TextView<P = unknown> {
      * On a short screen (a phone held sideways, 400% zoom) the toolbar slides away while the reader
      * scrolls down and comes back when they scroll up or reach it with Tab: it would otherwise cover
      * half the text (87 px of outside's at 320 × 256), and one that scrolled away would take the
-     * reader to the top, away from their place, for a size or a theme.
+     * reader to the top, away from their place, for a size or a theme. The view's own smooth scrolls
+     * (_self: a size, a turn, Back) move it neither way: the place lands below it, shown for the jump
+     * (_scrollTo), and a browser's smooth scroll goes on after the call, down as often as not.
      * @private
      */
     private _headroom;

@@ -995,6 +995,38 @@ describe('TextView: a short screen', () => {
     assert.equal(bar.classList.contains('tv-away'), false, 'the contents open: it stays');
   });
 
+  it('keeps the toolbar through a smooth scroll of its own (a size, the 3D book\'s turn), but not the reader\'s', async () => {
+    const { view, book, bar } = page({ short: true });
+    view.el.smoothSteps = 4; // a browser's smooth scroll: a step at a time, after it is asked
+    await view.open();
+    await settle();
+    view.el.scrollTop = at(9) + 50; // reading down
+    await settle();
+    view.el.scrollTop = at(9); // and up: the toolbar back, block 9 at its foot
+    await settle();
+    mock.timers.tick(250);
+    await settle();
+    assert.equal(bar.classList.contains('tv-away'), false);
+    view.$('.tv-bigger').click();
+    await settle();
+    assert.deepEqual(view.el.scrolled.at(-1), { top: at(9, 1.1), behavior: 'smooth' });
+    assert.equal(view.el.scrollTop, at(9, 1.1), 'down to block 9, the text larger');
+    assert.equal(bar.classList.contains('tv-away'), false, 'its own scroll down: block 9 below the toolbar, still there');
+    mock.timers.tick(250);
+    await settle();
+    await book.turn(1);
+    await settle();
+    assert.deepEqual(view.el.scrolled.at(-1), { top: at(10, 1.1), behavior: 'smooth' });
+    assert.equal(view.el.scrollTop, at(10, 1.1));
+    assert.equal(bar.classList.contains('tv-away'), false, 'nor for the 3D book\'s turn');
+    mock.timers.tick(250);
+    await settle();
+    view.scrollStep(1); // a TV's ↓: the reader's, smooth
+    await settle();
+    assert.deepEqual(view.el.scrolled.at(-1), { by: Math.round((VIEW - BAR) * 0.4), behavior: 'smooth' });
+    assert.equal(bar.classList.contains('tv-away'), true, 'reading down');
+  });
+
   it('keeps the toolbar on a screen tall enough', async () => {
     const { view, bar } = page();
     await view.open();

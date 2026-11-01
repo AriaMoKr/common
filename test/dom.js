@@ -3,6 +3,7 @@
 // view asks for, events that bubble, focus with focusin and focusout, and a layout each test lays
 // out itself. An element's box is where it is in its scroller's content (or the page's) and how
 // wide: the scroller's scrollTop moves what is in it, and its scroll events come a microtask later.
+// A smooth scroll is done at once, or with smoothSteps a step at a time, as a browser's moves.
 // A sticky box stays at its scroller's top, moved up by its height while it has the class tv-away
 // (as the text view's CSS moves its toolbar). Hidden, or not in the document, an element has no box.
 // Grown from outside's test/helpers/fake-dom.js (vrlbry's before it). Not a test file itself
@@ -167,6 +168,13 @@ export class El {
     this._scrollTop = 0;
     /** Each scrollTo ({ top, behavior }) and scrollBy ({ by, behavior }) asked of it. @type {Record<string, unknown>[]} */
     this.scrolled = [];
+    /**
+     * The steps a smooth scroll takes, each a microtask after the one before, from where it was when
+     * asked (its scrollTop still there), as a browser's moves over frames; 0, at once.
+     */
+    this.smoothSteps = 0;
+    /** Which smooth scroll is under way: another scroll stops it, as in a browser. */
+    this._glide = 0;
     /** Each focus() it took, with its options. @type {unknown[]} */
     this.focused = [];
   }
@@ -347,22 +355,46 @@ export class El {
 
   get scrollTop() { return this._scrollTop; }
   set scrollTop(v) {
+    this._glide++;
+    this._moveTo(v);
+  }
+
+  /** Scrolled to v, within its end; its scroll event a microtask later. @param {number} v */
+  _moveTo(v) {
     const top = Math.max(0, Math.min(this.scrollHeight - this.clientHeight, Math.round(v)));
     if (top === this._scrollTop) return;
     this._scrollTop = top;
     queueMicrotask(() => this.dispatchEvent(new Ev('scroll')));
   }
 
-  /** @param {{ top?: number, behavior?: string }} [o] at once, smooth or not */
+  /** @param {{ top?: number, behavior?: string }} [o] at once, unless smooth with smoothSteps */
   scrollTo({ top = this._scrollTop, behavior = 'auto' } = {}) {
     this.scrolled.push({ top, behavior });
-    this.scrollTop = top;
+    this._scroll(top, behavior);
   }
 
   /** @param {{ top?: number, behavior?: string }} [o] */
   scrollBy({ top = 0, behavior = 'auto' } = {}) {
     this.scrolled.push({ by: top, behavior });
-    this.scrollTop = this._scrollTop + top;
+    this._scroll(this._scrollTop + top, behavior);
+  }
+
+  /** @param {number} top @param {string} behavior */
+  _scroll(top, behavior) {
+    const steps = behavior === 'smooth' ? this.smoothSteps : 0;
+    if (!steps) {
+      this.scrollTop = top;
+      return;
+    }
+    const glide = ++this._glide;
+    const from = this._scrollTop;
+    (async () => {
+      for (let i = 1; i <= steps; i++) {
+        await null;
+        if (this._glide !== glide) return; // stopped by another scroll
+        this._moveTo(from + ((top - from) * i) / steps);
+      }
+    })();
   }
 }
 

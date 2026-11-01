@@ -978,7 +978,7 @@ site's own `TextView` extends it with its book.
 | The keys | Esc closes its contents, else the view; T closes the view. ← and → turn the 3D book's pages, from the reader's place. A field (the slider, the theme) keeps its own keys, and a key with Ctrl, Meta or Alt is the page's. The view has `data-own-keys`, so the walking controls leave its keys to it. |
 | The place | The view keeps the place it shows. Once the reader's scrolling rests a quarter of a second, the place at its top is shared: the 3D book jumps there in place (`jumpTo(place, { inPlace: true })`). A size, Back, Put back, a turn and a link bring the book there first. The view's own scrolls, to a place it shows, aren't reading. It keeps the place through a change of width too (a phone turned, a window resized, the browser's zoom), which reflows the text, or wraps the toolbar onto more rows, under the scroll: it goes back to the reader's place, taken as they scrolled, before the text moved. That scroll is its own, as is one the browser makes meanwhile, so the 3D book stays where it is. A change of height alone moves nothing. When the 3D book shows its pages again with the reader's place still on them (outside's refit, as it goes from one page to two or back), the view stays at that place. After a turn to other pages it goes to the book's place, the new pages' first, and after a turn of its own (← and →) too, even where those pages hold some of the place: vrlbry's places are blocks, and a paragraph runs over two spreads. |
 | Opening | At the 3D book's place, or at the view's own while the book still shows it (closed and opened again). A frame on, once it is drawn, at its place again, unless the reader has scrolled. Not in VR, and not without a book. |
-| A short screen | At 420 px high or less (a phone held sideways, 400% zoom), the toolbar slides away while the reader reads down, and comes back when they read up, jump, or reach it with Tab, the text staying at their place. `--tv-bar-h`, kept at the toolbar's height, stops what Tab and a jump scroll to below it. |
+| A short screen | At 420 px high or less (a phone held sideways, 400% zoom), the toolbar slides away while the reader reads down, and comes back when they read up, jump, or reach it with Tab, the text staying at their place. The view's own smooth scrolls (to the place after a size, a turn or Back) leave it in sight, the place just below it. `--tv-bar-h`, kept at the toolbar's height, stops what Tab and a jump scroll to below it. |
 | A TV | With `tv`, the view holds the remote's focus while reading: ↑ and ↓ scroll it by `step`, and the toolbar and the links are the card the site's remote goes into. A remote that leaves the focus on the 3D view calls `turn(side)` and `scrollStep(dir)` instead. |
 | Themes | Paper, sepia and night, each with its `color-scheme` (night's is `dark`), and the text's size, as the 3D book has them. |
 
@@ -1070,7 +1070,7 @@ Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.8.2",
+  "common": "github:AriaMoKr/common#v0.8.3",
   "three": "0.186.1"
 }
 ```
@@ -1089,7 +1089,8 @@ a site's own controls to it. v0.8.0 adds `panel.js` and `text-view.js`, and the 
 changes no other module. v0.8.1 changes only those two: a list's right column is as wide as its
 text, and the text view keeps the reader's place through a change of width. v0.8.2 changes only
 the text view's `follow()`: the view stays at the reader's place while the 3D book's pages, shown
-again, still hold it.
+again, still hold it. v0.8.3 changes only the text view's toolbar on a short screen: the view's own
+smooth scrolls leave it in sight.
 
 `src/` goes together: `controls.js` imports `./gamepad.js` and `./tv.js` from beside it, so each
 way below copies or serves the whole folder, and a vendored copy works wherever it lands.
@@ -1332,14 +1333,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.2
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.3
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.2
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.3
     with:
       build: npm run build
       path: dist
