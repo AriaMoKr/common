@@ -69,6 +69,8 @@ export class TextView<P = unknown> {
     private _moved;
     /** @private The jumps under way of the 3D book to the view's place: the view stays as it is. */
     private _quiet;
+    /** @private The view's own turns under way (turn): it goes to the new pages' first place. */
+    private _turning;
     /** @private Where the view was scrolled to, when last seen (_headroom). @type {number | null} */
     private _lastY;
     /** @private The toolbar's control focused last (cardStart). @type {HTMLElement | null} */
@@ -206,7 +208,13 @@ export class TextView<P = unknown> {
      * @param {P | null | undefined} place
      */
     aim(place: P | null | undefined): void;
-    /** After every page turn or jump of the 3D book: the view follows it. */
+    /**
+     * After every page turn or jump of the 3D book: the view follows it. While the 3D book still shows
+     * the view's place (showsPlace), the view stays there, as it opens: its pages shown again, one or
+     * two (outside's refit). A turn of the view's own (turn) goes to the new pages' first place all the
+     * same: they may hold some of the place too, as vrlbry's places are blocks, and a paragraph runs
+     * over two spreads.
+     */
     follow(): void;
     /** The theme's colours and the text size, as the 3D book has them. @protected */
     protected _style(): void;
@@ -291,8 +299,8 @@ export class TextView<P = unknown> {
     /** The 3D book's place: where the view opens and what it follows. @returns {P | null} */
     placeShown(): P | null;
     /**
-     * Whether the 3D book's open pages show a place: the view opens again at its own while they do
-     * (vrlbry's _showsBlock, outside's showsPlace).
+     * Whether the 3D book's open pages show a place: the view opens again at its own while they do, and
+     * stays at it when they are shown again (vrlbry's _showsBlock, outside's showsPlace).
      * @param {P} place
      * @returns {boolean}
      */

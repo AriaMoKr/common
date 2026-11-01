@@ -976,7 +976,7 @@ site's own `TextView` extends it with its book.
 | | |
 |---|---|
 | The keys | Esc closes its contents, else the view; T closes the view. ← and → turn the 3D book's pages, from the reader's place. A field (the slider, the theme) keeps its own keys, and a key with Ctrl, Meta or Alt is the page's. The view has `data-own-keys`, so the walking controls leave its keys to it. |
-| The place | The view keeps the place it shows. Once the reader's scrolling rests a quarter of a second, the place at its top is shared: the 3D book jumps there in place (`jumpTo(place, { inPlace: true })`). A size, Back, Put back, a turn and a link bring the book there first. The view's own scrolls, to a place it shows, aren't reading. It keeps the place through a change of width too (a phone turned, a window resized, the browser's zoom), which reflows the text, or wraps the toolbar onto more rows, under the scroll: it goes back to the reader's place, taken as they scrolled, before the text moved. That scroll is its own, as is one the browser makes meanwhile, so the 3D book stays where it is. A change of height alone moves nothing. |
+| The place | The view keeps the place it shows. Once the reader's scrolling rests a quarter of a second, the place at its top is shared: the 3D book jumps there in place (`jumpTo(place, { inPlace: true })`). A size, Back, Put back, a turn and a link bring the book there first. The view's own scrolls, to a place it shows, aren't reading. It keeps the place through a change of width too (a phone turned, a window resized, the browser's zoom), which reflows the text, or wraps the toolbar onto more rows, under the scroll: it goes back to the reader's place, taken as they scrolled, before the text moved. That scroll is its own, as is one the browser makes meanwhile, so the 3D book stays where it is. A change of height alone moves nothing. When the 3D book shows its pages again with the reader's place still on them (outside's refit, as it goes from one page to two or back), the view stays at that place. After a turn to other pages it goes to the book's place, the new pages' first, and after a turn of its own (← and →) too, even where those pages hold some of the place: vrlbry's places are blocks, and a paragraph runs over two spreads. |
 | Opening | At the 3D book's place, or at the view's own while the book still shows it (closed and opened again). A frame on, once it is drawn, at its place again, unless the reader has scrolled. Not in VR, and not without a book. |
 | A short screen | At 420 px high or less (a phone held sideways, 400% zoom), the toolbar slides away while the reader reads down, and comes back when they read up, jump, or reach it with Tab, the text staying at their place. `--tv-bar-h`, kept at the toolbar's height, stops what Tab and a jump scroll to below it. |
 | A TV | With `tv`, the view holds the remote's focus while reading: ↑ and ↓ scroll it by `step`, and the toolbar and the links are the card the site's remote goes into. A remote that leaves the focus on the 3D view calls `turn(side)` and `scrollStep(dir)` instead. |
@@ -1037,7 +1037,7 @@ parts, and outside's, which answers at once, both fit. A part being shown waits 
 | `partCount()`, `partOf(place)`, `partStart(part)` | 1, 0, null | The parts (vrlbry's chunks; outside's title page, pieces and sources), the one a place is in, and where each begins. |
 | `renderPart(body, part, { onLink })` | `{}` | The part built into `body`, its text as text, never as HTML; each link's click calls `onLink(to)`. Returns `{ title, subtitle }`, the view's heading and the line under it (hidden when empty). vrlbry's lets go of the last part's pictures here. |
 | `placeShown()` | null | The 3D book's place: where the view opens and what it follows. |
-| `showsPlace(place)` | false | Whether the book's open pages show a place: while they do, the view opens again at its own. |
+| `showsPlace(place)` | false | Whether the book's open pages show a place: while they do, the view opens again at its own, and stays at it when the book shows them again (outside's refit). |
 | `placeAimed(aim)` | `aim` | What the view shows for a place aimed at, once the book has gone there. vrlbry's shows its page's place for an element the 3D page found. |
 | `placeTop(place)` | null | Where in the view a place is (a `getBoundingClientRect()` top), to put it just below the toolbar; null for the part's top. vrlbry's finds its block, outside's the line with its word. |
 | `placeAt(top)` | null | The place at the view's top, `top` being the toolbar's foot: vrlbry's `topBlock`, and outside's with the first word in sight. |
@@ -1051,7 +1051,7 @@ parts, and outside's, which answers at once, both fit. A part being shown waits 
 |---|---|
 | `new TextView({ root, tv?, step?, returnFocus?, onOpen?, onClose? })` | The view in `root`, the overlay. `step(height)` is how far ↑ ↓ and `scrollStep` go, for the height shown below the toolbar: 0.4 of it by default, as vrlbry and music have it; outside's is `(h) => Math.max(40, h * 0.75)`. `returnFocus(away)` says where the focus goes as it closes (`away`: the book is being put back). `onOpen()` once it is open and has the focus, and `onClose()` once it has closed with the book still open. |
 | `open()`, `close({ keepPlace = true })`, `toggle()`, `isOpen` | As above. `close` in VR still shares the place. |
-| `follow()` | After every turn or jump of the 3D book: the view goes with it. |
+| `follow()` | After every turn or jump of the 3D book: the view goes with it, to `placeShown()`. While the pages shown still show the view's own place (`showsPlace`), as after outside's refit, it stays there, but not after a turn of its own (`turn`). |
 | `aim(place)` | Before a jump to a place the view should show (a link, Back, the contents) rather than the 3D page's first; `aim(null)` after. A site that cleans up its places does so here and calls `super`. |
 | `turn(side)`, `scrollStep(dir, repeat?)` | ← and →, from the reader's place, and ↑ and ↓ on a TV (a key held, `repeat`, without a smooth scroll each). |
 | `tocOpen`, `closeToc()`, `layer()`, `cardStart()`, `linkHere()`, `inBar(el)`, `onScreen(el)` | For a TV's remote: the contents open, and closed; the card (the contents when open, else the view); the toolbar's control Menu comes to (the one used last, else the first that can be used); the first link on the screen; whether a control is in the toolbar; and whether an element is on the screen, below the toolbar. |
@@ -1070,7 +1070,7 @@ Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.8.1",
+  "common": "github:AriaMoKr/common#v0.8.2",
   "three": "0.186.1"
 }
 ```
@@ -1087,7 +1087,9 @@ than the Hallway. v0.7.0 adds `controls.js` and changes no other module, so a si
 before it takes the controls. v0.7.1 adds `_startWalk`'s `turn`, and corrects the notes on moving
 a site's own controls to it. v0.8.0 adds `panel.js` and `text-view.js`, and the tools' types, and
 changes no other module. v0.8.1 changes only those two: a list's right column is as wide as its
-text, and the text view keeps the reader's place through a change of width.
+text, and the text view keeps the reader's place through a change of width. v0.8.2 changes only
+the text view's `follow()`: the view stays at the reader's place while the 3D book's pages, shown
+again, still hold it.
 
 `src/` goes together: `controls.js` imports `./gamepad.js` and `./tv.js` from beside it, so each
 way below copies or serves the whole folder, and a vendored copy works wherever it lands.
@@ -1330,14 +1332,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.1
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.2
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.1
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.2
     with:
       build: npm run build
       path: dist

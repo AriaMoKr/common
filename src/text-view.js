@@ -194,6 +194,8 @@ export class TextView {
     this._moved = false;
     /** @private The jumps under way of the 3D book to the view's place: the view stays as it is. */
     this._quiet = 0;
+    /** @private The view's own turns under way (turn): it goes to the new pages' first place. */
+    this._turning = 0;
     /** @private Where the view was scrolled to, when last seen (_headroom). @type {number | null} */
     this._lastY = null;
     /** @private The toolbar's control focused last (cardStart). @type {HTMLElement | null} */
@@ -322,7 +324,12 @@ export class TextView {
    */
   async turn(side) {
     await this._sync();
-    await this.turnPage(side);
+    this._turning++;
+    try {
+      await this.turnPage(side);
+    } finally {
+      this._turning--;
+    }
   }
 
   /**
@@ -555,7 +562,13 @@ export class TextView {
     this._aim = place ?? null;
   }
 
-  /** After every page turn or jump of the 3D book: the view follows it. */
+  /**
+   * After every page turn or jump of the 3D book: the view follows it. While the 3D book still shows
+   * the view's place (showsPlace), the view stays there, as it opens: its pages shown again, one or
+   * two (outside's refit). A turn of the view's own (turn) goes to the new pages' first place all the
+   * same: they may hold some of the place too, as vrlbry's places are blocks, and a paragraph runs
+   * over two spreads.
+   */
   follow() {
     this._style();
     const aim = this._aim;
@@ -565,7 +578,8 @@ export class TextView {
       this._header(); // the 3D book came to the view's place
       return;
     }
-    this._show(aim != null ? this.placeAimed(aim) : this.placeShown());
+    const kept = aim == null && !this._turning && this._book === this.bookKey() ? this._at : null;
+    this._show(aim != null ? this.placeAimed(aim) : kept != null && this.showsPlace(kept) ? kept : this.placeShown());
   }
 
   /** The theme's colours and the text size, as the 3D book has them. @protected */
@@ -822,8 +836,8 @@ export class TextView {
   }
 
   /**
-   * Whether the 3D book's open pages show a place: the view opens again at its own while they do
-   * (vrlbry's _showsBlock, outside's showsPlace).
+   * Whether the 3D book's open pages show a place: the view opens again at its own while they do, and
+   * stays at it when they are shown again (vrlbry's _showsBlock, outside's showsPlace).
    * @param {P} place
    * @returns {boolean}
    */

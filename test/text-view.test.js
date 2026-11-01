@@ -1,9 +1,10 @@
 // The text view's shell (src/text-view.js) over a stand-in DOM (test/dom.js), and a subclass whose
-// book has two parts of 20 blocks, its pages two blocks each, that counts each call of the site's
-// methods: opening at the place and closing at it, the keys, a rest sharing the place, a size and
-// Back brought there first, a theme, a change of width, a link aimed, the parts, the contents and
-// its focus, the headroom on a short screen, the TV's methods, and the CSS put in once and first.
-// Each over a book that answers at once (outside's) and one that answers later (vrlbry's).
+// book has two parts of 20 blocks, its pages two blocks each, open one or two at a time, that counts
+// each call of the site's methods: opening at the place and closing at it, the keys, a rest sharing
+// the place, a size and Back brought there first, a theme, a change of width, the 3D book's pages
+// shown again and turned, a link aimed, the parts, the contents and its focus, the headroom on a
+// short screen, the TV's methods, and the CSS put in once and first. Each over a book that answers
+// at once (outside's) and one that answers later (vrlbry's).
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
@@ -55,7 +56,10 @@ function key(target, name, init = {}) {
   return e;
 }
 
-/** The 3D book: two parts, its pages two blocks each; it answers at once, or (later) a microtask on. */
+/**
+ * The 3D book: two parts, its pages two blocks each, open a page at a time or two; it answers at
+ * once, or (later) a microtask on.
+ */
 class Book {
   constructor(later) {
     this.later = later;
@@ -63,8 +67,10 @@ class Book {
     this.vr = false;
     this.key = 'walden';
     this.title = 'Walden';
-    /** The open page, by its first block. */
+    /** The open page, by its first block; of two, the left one. */
     this.at = { c: 0, b: 4 };
+    /** Two pages open, four blocks (outside's on a screen wider than high). */
+    this.two = false;
     this.theme = 'paper';
     this.scale = 1;
     this.trail = 0;
@@ -73,7 +79,11 @@ class Book {
     this.onShow = () => {};
   }
 
-  pageOf({ c, b }) { return { c, b: b - (b % 2) }; }
+  /** The blocks open: a page's two, or two pages' four. */
+  get size() { return this.two ? 4 : 2; }
+
+  /** The pages open at a place, by their first block. */
+  pageOf({ c, b }) { return { c, b: b - (b % this.size) }; }
 
   shows(place) {
     const p = this.pageOf(place);
@@ -100,8 +110,16 @@ class Book {
 
   turn(dir) {
     return this._do(() => {
-      const n = Math.max(0, Math.min(2 * BLOCKS - 2, this.page() + 2 * dir));
+      const n = Math.max(0, Math.min(2 * BLOCKS - this.size, this.page() + this.size * dir));
       this._show({ c: Math.floor(n / BLOCKS), b: n % BLOCKS });
+    });
+  }
+
+  /** A page at a time, or two (outside's refit, as the screen's shape changes): from the left one of two. */
+  refit(two) {
+    return this._do(() => {
+      this.two = two;
+      this._show(this.pageOf(this.at));
     });
   }
 
@@ -594,6 +612,87 @@ for (const later of [false, true]) {
       mock.timers.tick(250);
       await settle();
       assert.deepEqual(view.calls, [], 'not reading: the 3D book not asked to jump');
+    });
+
+    it('stays at its place while the 3D book\'s pages shown again hold it (outside\'s refit, one page or two); a turn goes to the new pages\' first', async () => {
+      const { view, book } = page({ later });
+      book.two = true; // a screen wider than high: blocks 4 to 7 open
+      await view.open();
+      view.el.scrollTop = at(5); // read to block 5, on the left page
+      await settle();
+      mock.timers.tick(250);
+      await settle();
+      view.calls.length = 0;
+      await book.refit(false); // narrowed: a page at a time, the left one, blocks 4 and 5
+      await settle();
+      assert.deepEqual(book.at, { c: 0, b: 4 });
+      assert.equal(view.el.scrollTop, at(5), 'block 5 still at the toolbar\'s foot, not the page\'s first');
+      mock.timers.tick(250);
+      await settle();
+      view.el.scrollTop = at(7); // read on, to the next page
+      await settle();
+      mock.timers.tick(250);
+      await settle();
+      assert.deepEqual(book.at, { c: 0, b: 6 }, 'shared');
+      await book.refit(true); // widened: two pages again, from the left one, blocks 4 to 7
+      await settle();
+      assert.deepEqual(book.at, { c: 0, b: 4 });
+      assert.equal(view.el.scrollTop, at(7), 'block 7, not block 4');
+      mock.timers.tick(250);
+      await settle();
+      assert.deepEqual(view.calls, [['jumpTo', { c: 0, b: 7 }, { inPlace: true }]], 'the place shared once, the book not asked to jump again');
+      view.calls.length = 0;
+      key(view.el, 'ArrowRight'); // a turn: blocks 8 to 11
+      await settle();
+      assert.deepEqual(view.calls, [['jumpTo', { c: 0, b: 7 }, { inPlace: true }], ['turnPage', 1]]);
+      assert.deepEqual(book.at, { c: 0, b: 8 });
+      assert.equal(view.el.scrollTop, at(8), 'the new pages from their first place');
+      key(view.el, 'ArrowLeft');
+      await settle();
+      assert.deepEqual(book.at, { c: 0, b: 4 });
+      assert.equal(view.el.scrollTop, at(4));
+      await book.turn(1); // the 3D book's own: pages without the view's place
+      await settle();
+      assert.equal(view.el.scrollTop, at(8));
+      mock.timers.tick(250);
+      await settle();
+      view.el.scrollTop = at(9);
+      await settle();
+      mock.timers.tick(250);
+      await settle();
+      book.key = 'cranford'; // another book, open at pages that hold the same place
+      view.calls.length = 0;
+      await book.refit(true);
+      await settle();
+      assert.deepEqual(view.calls, [['renderPart', 0]]);
+      assert.equal(view.el.scrollTop, at(8), 'its own place: the view\'s was the other book\'s');
+    });
+
+    it('goes to the new pages\' first place on a turn of its own, even where they hold its place too (vrlbry\'s paragraph over two spreads)', async () => {
+      const { view, book } = page({ later });
+      // vrlbry's places are blocks, and its pages hold some of a block run on from the page before:
+      // here each page holds the next page's first block too (vrlbry's _showsBlock).
+      const shows = book.shows.bind(book);
+      book.shows = (place) => shows(place) || shows({ c: place.c, b: place.b - 2 });
+      await view.open();
+      key(view.el, 'ArrowRight'); // blocks 6 and 7
+      await settle();
+      assert.deepEqual(book.at, { c: 0, b: 6 });
+      assert.equal(view.el.scrollTop, at(6));
+      key(view.el, 'ArrowLeft'); // blocks 4 and 5, which hold some of block 6 too
+      await settle();
+      assert.deepEqual(book.at, { c: 0, b: 4 });
+      assert.equal(view.el.scrollTop, at(4), 'block 4: the turn shown, not block 6 kept');
+      mock.timers.tick(250);
+      await settle();
+      view.el.scrollTop = at(6); // read down to block 6, which the page holds some of
+      await settle();
+      mock.timers.tick(250);
+      await settle();
+      assert.deepEqual(book.at, { c: 0, b: 4 }, 'the page holds it: the book stays');
+      await book.refit(false); // shown again
+      await settle();
+      assert.equal(view.el.scrollTop, at(6), 'shown again, it stays');
     });
 
     it('brings the book to the reader\'s place before Back and Put back; the slider jumps', async () => {
