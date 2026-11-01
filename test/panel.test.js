@@ -134,6 +134,28 @@ describe('Panel: what it draws', () => {
     assert.ok(has(log, ['set', 'fillStyle', 'rgba(255,255,255,0.10)'], at), 'the row pointed at');
   });
 
+  it('keeps a row\'s right column as wide as its text: a label beside a short one whole, beside a long one cut before it', () => {
+    const { p, log } = panel();
+    // 30 px measures 15 px a character, and the right column's 24 px 12. The 140 px once kept for any
+    // right left a label 392 of 560 - 28: outside's title cut beside its page number, and the one
+    // beside "waiting to index" running 9 px into it.
+    const title = 'I wandered lonely as a Cloud';
+    p.add({ id: 'l', type: 'list', x: 20, y: 40, w: 560, h: 200, rowH: 100, size: 30, serif: true, items: [
+      { label: title, right: '11' },
+      { label: title, sub: 'William Wordsworth, Poems in Two Volumes', right: 'waiting to index' },
+    ] });
+    p.redraw();
+    const [whole, page, cut, sub, waiting] = texts(log);
+    assert.deepEqual(whole, [title, 34, 90], 'its 420 px in 560 - 28 - (24 + 18 + 6)');
+    assert.deepEqual(page, ['11', 562, 90], 'drawn 18 px in from the row\'s end');
+    assert.deepEqual(cut, ['I wandered lonely as…', 34, 176], 'in 560 - 28 - (192 + 18 + 6)');
+    assert.deepEqual(sub, ['William Wordsworth, Poems in…', 34, 212], 'and the line under it');
+    assert.deepEqual(waiting, ['waiting to index', 562, 190]);
+    const from = waiting[1] - waiting[0].length * 12;
+    assert.ok(cut[1] + cut[0].length * 15 <= from - 14 - 6, 'the label stops before the right begins');
+    assert.ok(has(log, ['set', 'font', `30px ${UI.serif}`]) && has(log, ['set', 'font', `24px ${UI.serif}`]), 'each in its own font');
+  });
+
   it('gives a list with more rows than fit a scroll bar, and draws from where it is scrolled', () => {
     const { p, list, log } = kiosk();
     p.scrollList('places', 25);

@@ -175,13 +175,15 @@ export class TextView {
     this._open = false;
     /** @private A part shown waits for the one before (_show). @type {Promise<void>} */
     this._showing = Promise.resolve();
-    // The place shared with the 3D book: where the view put itself, or the place at its top once the
-    // reader's own scrolling rests (_sync). The view's own scrolls are not reading (near a part's end
-    // the place aimed at cannot reach the top): _self while a smooth one runs, _selfTop where an
-    // instant one left the view (or put the text back: a slid-away toolbar). _moved: the reader has
-    // scrolled since the place was taken.
+    // The place shared with the 3D book: where the view put itself, or the place at its top as the
+    // reader scrolls (_read), shared once their scrolling rests (_sync). The view's own scrolls are
+    // not reading (near a part's end the place aimed at cannot reach the top): _self while a smooth
+    // one runs, _selfTop where an instant one left the view (or put the text back: a slid-away
+    // toolbar). _moved: the reader has scrolled since the place was shared.
     /** @private @type {P | null} */
     this._at = null;
+    /** @private The layout the place is right for (_layout), once the observers have seen one (_reflowed). @type {string | null} */
+    this._laid = null;
     /** @private Where a jump is going (aim): the view shows it, not the 3D page's first place. @type {P | null} */
     this._aim = null;
     /** @private */
@@ -264,8 +266,10 @@ export class TextView {
     this.$('.tv-theme-sel').addEventListener('change', (e) => this._theme(/** @type {HTMLSelectElement} */ (e.target).value)); // the select's own
     this.$('.tv-slider').addEventListener('change', (e) => this.jumpToProgress(Number(/** @type {HTMLInputElement} */ (e.target).value) / 1000)); // the slider's own
     this.el.addEventListener('scroll', () => {
-      if (!this._self && this.el.scrollTop !== this._selfTop) this._moved = true;
-      this._headroom();
+      if (!this._reflowing()) {
+        this._headroom();
+        if (!this._self && this.el.scrollTop !== this._selfTop) this._read();
+      }
       this._restSoon();
     }, { passive: true });
     const bar = this.$('.tv-bar');
@@ -280,9 +284,16 @@ export class TextView {
       }
     });
     // What Tab or a jump scrolls to stops below the sticky toolbar, not under it (scroll-margin on the
-    // text: a scroll-padding would count the toolbar's own buttons as hidden and scroll to them).
+    // text: a scroll-padding would count the toolbar's own buttons as hidden and scroll to them). And
+    // as it and the text change with the view's width, the view goes back to the reader's place.
     const Observer = this.doc.defaultView?.ResizeObserver;
-    if (Observer) new Observer(() => { this.el.style.setProperty('--tv-bar-h', `${bar.offsetHeight}px`); }).observe(bar);
+    if (Observer) {
+      new Observer(() => {
+        this.el.style.setProperty('--tv-bar-h', `${bar.offsetHeight}px`);
+        this._reflowed();
+      }).observe(bar);
+      new Observer(() => this._reflowed()).observe(this.$('.tv-body'));
+    }
     this.el.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -365,6 +376,49 @@ export class TextView {
     if (this._moved) this._sync();
   }
 
+  /**
+   * The reader has scrolled: their place, at the toolbar's foot, is taken now, while the text is as
+   * they read it, since a change of width moves it under them (_reflowed).
+   * @private
+   */
+  _read() {
+    this._moved = true;
+    if (this._open && this.part >= 0 && this.bookOpen()) this._at = this.placeAt(this._top()) ?? this._at;
+  }
+
+  /**
+   * What the text's place under the scroll depends on, besides the text: its width, which it is
+   * wrapped to, and the toolbar's height (the toolbar wraps too), which it begins below.
+   * @private
+   */
+  _layout() {
+    return `${this.$('.tv-body').clientWidth} ${this.$('.tv-bar').offsetHeight}`;
+  }
+
+  /**
+   * Whether the layout has changed since the place was taken, and the observers have yet to see it
+   * (_reflowed): what is at the top then is not the reader's place, and a scroll the layout made (the
+   * browser keeping something in sight, or the text shorter, its end nearer) is not their reading.
+   * @private
+   */
+  _reflowing() {
+    return this._laid != null && this._layout() !== this._laid;
+  }
+
+  /**
+   * The view's width has changed (a phone turned, a window resized, the browser's zoom), and the text
+   * has reflowed, or the toolbar wrapped again, under the view's scroll: the view goes back to the
+   * reader's place, taken before, as it does a frame after opening. Its own scroll, not reading: the
+   * 3D book stays where it is. A change of height alone moves nothing.
+   * @private
+   */
+  _reflowed() {
+    const was = this._laid;
+    this._laid = this._layout();
+    if (was == null || this._laid === was || !this._open || this.part < 0 || this._at == null) return;
+    this._scrollTo(this._at, false);
+  }
+
   /** Where the toolbar's foot is, in the page's coordinates: what is above it is under the toolbar. @private */
   _top() {
     return this.el.getBoundingClientRect().top + this._barH();
@@ -378,7 +432,7 @@ export class TextView {
    */
   async _sync() {
     if (!this._open || !this.bookOpen() || this.part < 0) return;
-    if (this._moved) this._at = this.placeAt(this._top()) ?? this._at;
+    if (this._moved && !this._reflowing()) this._at = this.placeAt(this._top()) ?? this._at;
     this._moved = false;
     if (this._at == null) return;
     this._quiet++;
@@ -480,7 +534,7 @@ export class TextView {
   async close({ keepPlace = true } = {}) {
     if (!this._open) return;
     const place = keepPlace && this.bookOpen() && this.part >= 0;
-    if (place && this._moved) this._at = this.placeAt(this._top()) ?? this._at;
+    if (place && this._moved && !this._reflowing()) this._at = this.placeAt(this._top()) ?? this._at;
     clearTimeout(this._restTimer);
     this._moved = this._self = false;
     this._open = false;
@@ -595,6 +649,7 @@ export class TextView {
     // An instant scroll is done at once: its event is known by where it leaves the view.
     this._selfTop = smoothly ? null : this.el.scrollTop;
     this._lastY = this.el.scrollTop;
+    if (this._laid != null) this._laid = this._layout(); // what the place is right for now
   }
 
   /** Where the reader is, Back, and the parts. @protected */

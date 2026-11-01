@@ -472,9 +472,16 @@ export class Panel {
       g.textBaseline = 'middle';
       g.textAlign = 'left';
       const indent = (it.indent || 0) * size * 0.9;
+      // The right column is as wide as its text in its own font: the label stops a fifth of the
+      // size before it, and before the 18 px it is drawn in from the row's end.
+      let right = 0;
+      if (it.right) {
+        g.font = this._font(el, size * 0.8);
+        right = g.measureText(it.right).width + 18 + size * 0.2;
+      }
       g.font = this._font(el, size, it.weight || '');
       g.fillStyle = it.disabled ? '#857868' : UI.text;
-      const textW = el.w - barW - 28 - indent - (it.right ? 140 : 0);
+      const textW = el.w - barW - 28 - indent - right;
       if (it.sub) {
         g.fillText(wrapText(g, it.label, textW, 1)[0], el.x + 14 + indent, y + rowH * 0.36);
         g.font = this._font(el, size * 0.72);

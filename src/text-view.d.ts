@@ -57,6 +57,8 @@ export class TextView<P = unknown> {
     private _showing;
     /** @private @type {P | null} */
     private _at;
+    /** @private The layout the place is right for (_layout), once the observers have seen one (_reflowed). @type {string | null} */
+    private _laid;
     /** @private Where a jump is going (aim): the view shows it, not the 3D page's first place. @type {P | null} */
     private _aim;
     /** @private */
@@ -122,6 +124,33 @@ export class TextView<P = unknown> {
     private _selfScrolled;
     /** @private */
     private _rest;
+    /**
+     * The reader has scrolled: their place, at the toolbar's foot, is taken now, while the text is as
+     * they read it, since a change of width moves it under them (_reflowed).
+     * @private
+     */
+    private _read;
+    /**
+     * What the text's place under the scroll depends on, besides the text: its width, which it is
+     * wrapped to, and the toolbar's height (the toolbar wraps too), which it begins below.
+     * @private
+     */
+    private _layout;
+    /**
+     * Whether the layout has changed since the place was taken, and the observers have yet to see it
+     * (_reflowed): what is at the top then is not the reader's place, and a scroll the layout made (the
+     * browser keeping something in sight, or the text shorter, its end nearer) is not their reading.
+     * @private
+     */
+    private _reflowing;
+    /**
+     * The view's width has changed (a phone turned, a window resized, the browser's zoom), and the text
+     * has reflowed, or the toolbar wrapped again, under the view's scroll: the view goes back to the
+     * reader's place, taken before, as it does a frame after opening. Its own scroll, not reading: the
+     * 3D book stays where it is. A change of height alone moves nothing.
+     * @private
+     */
+    private _reflowed;
     /** Where the toolbar's foot is, in the page's coordinates: what is above it is under the toolbar. @private */
     private _top;
     /**

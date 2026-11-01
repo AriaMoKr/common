@@ -1,11 +1,11 @@
 // A stand-in for the page's DOM, for the text view in Node (test/text-view.test.js): a document with
 // its head, body and window, elements built by hand or from markup (innerHTML), the few selectors a
 // view asks for, events that bubble, focus with focusin and focusout, and a layout each test lays
-// out itself. An element's box is where it is in its scroller's content (or the page's): the
-// scroller's scrollTop moves what is in it, and its scroll events come a microtask later. A sticky
-// box stays at its scroller's top, moved up by its height while it has the class tv-away (as the
-// text view's CSS moves its toolbar). Hidden, or not in the document, an element has no box. Grown
-// from outside's test/helpers/fake-dom.js (vrlbry's before it). Not a test file itself
+// out itself. An element's box is where it is in its scroller's content (or the page's) and how
+// wide: the scroller's scrollTop moves what is in it, and its scroll events come a microtask later.
+// A sticky box stays at its scroller's top, moved up by its height while it has the class tv-away
+// (as the text view's CSS moves its toolbar). Hidden, or not in the document, an element has no box.
+// Grown from outside's test/helpers/fake-dom.js (vrlbry's before it). Not a test file itself
 // (test/*.test.js).
 
 const VOID = new Set(['br', 'hr', 'img', 'input', 'link', 'meta']);
@@ -133,9 +133,9 @@ function parse(doc, html) {
 }
 
 /**
- * Where an element is laid out: top and height in its scroller's content (or the page's), and
- * whether it sticks to its scroller's top.
- * @typedef {{ top: number, height: number, sticky?: boolean }} Box
+ * Where an element is laid out: top and height in its scroller's content (or the page's), its width
+ * (100), and whether it sticks to its scroller's top.
+ * @typedef {{ top: number, height: number, width?: number, sticky?: boolean }} Box
  */
 
 export class El {
@@ -320,12 +320,13 @@ export class El {
     if (!this.box || !this.displayed()) return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0 };
     const s = this.scroller;
     const h = this.box.height;
+    const w = this.box.width ?? 100;
     let top = this.box.top;
     if (s) {
       const base = s.getBoundingClientRect().top;
       top = this.box.sticky ? base - (this.classList.contains('tv-away') ? h : 0) : base + this.box.top - s.scrollTop;
     }
-    return { top, bottom: top + h, left: 0, right: 100, width: 100, height: h, x: 0, y: top };
+    return { top, bottom: top + h, left: 0, right: w, width: w, height: h, x: 0, y: top };
   }
 
   getClientRects() {
@@ -335,6 +336,7 @@ export class El {
 
   get offsetHeight() { return this.box && this.displayed() ? this.box.height : 0; }
   get clientHeight() { return this.offsetHeight; }
+  get clientWidth() { return this.box && this.displayed() ? this.box.width ?? 100 : 0; }
 
   /** How high what it scrolls is: its own height, or the foot of the lowest box in it. */
   get scrollHeight() {

@@ -935,7 +935,7 @@ panel.set('volume', { value: 0.7 });             // drawn again only when a fiel
 | `text` | `text` in the lines that fit `w` (and as many as fit `h`, or `maxLines`, the last with an ellipsis), `size` pixels high (34), with `serif`, `weight`, `color`, `align` and `valign: 'middle'`. |
 | `button` | `label` on one line, lit while pointed at and drawn pressed while `active`; `onClick(el)`. |
 | `slider` | `value` 0…1 from its left. Used, it takes the value there and calls `onClick(value, el)`; pointed at, a line shows where (`hoverValue`). |
-| `list` | `items` (`{ label, sub?, right?, weight?, indent?, active?, disabled?, onClick? }`) in rows `rowH` high (64), from row `scroll`, in the list's `size` and face (`serif`). With more than fit, a scroll bar at its right: ▲ and ▼ a page each, the track a page towards the press, and a thumb to drag. |
+| `list` | `items` (`{ label, sub?, right?, weight?, indent?, active?, disabled?, onClick? }`) in rows `rowH` high (64), from row `scroll`, in the list's `size` and face (`serif`). An item's `right` is at the row's end, 0.8 of the size, in a column as wide as its text: the label and `sub` stop a fifth of the size before it. With more than fit, a scroll bar at its right: ▲ and ▼ a page each, the track a page towards the press, and a thumb to drag. |
 | `image` | A picture (an image, a canvas or a bitmap) as large as fits, in the middle, with a shadow; a placeholder until it has a size. |
 | `rect` | A rectangle of `color`, its corners rounded by `radius`. |
 | `custom` | `draw(g, el)` each time the panel is drawn, such as music's piano roll; its other fields are the site's. |
@@ -976,7 +976,7 @@ site's own `TextView` extends it with its book.
 | | |
 |---|---|
 | The keys | Esc closes its contents, else the view; T closes the view. ← and → turn the 3D book's pages, from the reader's place. A field (the slider, the theme) keeps its own keys, and a key with Ctrl, Meta or Alt is the page's. The view has `data-own-keys`, so the walking controls leave its keys to it. |
-| The place | The view keeps the place it shows. Once the reader's scrolling rests a quarter of a second, the place at its top is shared: the 3D book jumps there in place (`jumpTo(place, { inPlace: true })`). A size, Back, Put back, a turn and a link bring the book there first. The view's own scrolls, to a place it shows, aren't reading. |
+| The place | The view keeps the place it shows. Once the reader's scrolling rests a quarter of a second, the place at its top is shared: the 3D book jumps there in place (`jumpTo(place, { inPlace: true })`). A size, Back, Put back, a turn and a link bring the book there first. The view's own scrolls, to a place it shows, aren't reading. It keeps the place through a change of width too (a phone turned, a window resized, the browser's zoom), which reflows the text, or wraps the toolbar onto more rows, under the scroll: it goes back to the reader's place, taken as they scrolled, before the text moved. That scroll is its own, as is one the browser makes meanwhile, so the 3D book stays where it is. A change of height alone moves nothing. |
 | Opening | At the 3D book's place, or at the view's own while the book still shows it (closed and opened again). A frame on, once it is drawn, at its place again, unless the reader has scrolled. Not in VR, and not without a book. |
 | A short screen | At 420 px high or less (a phone held sideways, 400% zoom), the toolbar slides away while the reader reads down, and comes back when they read up, jump, or reach it with Tab, the text staying at their place. `--tv-bar-h`, kept at the toolbar's height, stops what Tab and a jump scroll to below it. |
 | A TV | With `tv`, the view holds the remote's focus while reading: ↑ and ↓ scroll it by `step`, and the toolbar and the links are the card the site's remote goes into. A remote that leaves the focus on the 3D view calls `turn(side)` and `scrollStep(dir)` instead. |
@@ -1070,7 +1070,7 @@ Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.8.0",
+  "common": "github:AriaMoKr/common#v0.8.1",
   "three": "0.186.1"
 }
 ```
@@ -1086,7 +1086,8 @@ modules of v0.1.0 to v0.5.0 as they were. v0.6.3 adds `hallLink` to `door.js`, f
 than the Hallway. v0.7.0 adds `controls.js` and changes no other module, so a site can move to it
 before it takes the controls. v0.7.1 adds `_startWalk`'s `turn`, and corrects the notes on moving
 a site's own controls to it. v0.8.0 adds `panel.js` and `text-view.js`, and the tools' types, and
-changes no other module.
+changes no other module. v0.8.1 changes only those two: a list's right column is as wide as its
+text, and the text view keeps the reader's place through a change of width.
 
 `src/` goes together: `controls.js` imports `./gamepad.js` and `./tv.js` from beside it, so each
 way below copies or serves the whole folder, and a vendored copy works wherever it lands.
@@ -1329,14 +1330,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.0
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.1
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.0
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.1
     with:
       build: npm run build
       path: dist
@@ -1597,9 +1598,9 @@ and each view opens and closes at its place, keeps it through a size and a theme
   - `canvas-panel.js` goes. `book.js` and `controls.js` import `Panel` and `UI`, and the types, from
     `common/panel.js`. The contents panel is made with `ring: 2`, its outline as now.
   - Its list draws vrlbry's way. A row's second line is 0.72 of the list's size, in the list's face
-    (0.66, in the UI's, now). The right column is 140 px wide, in the row's middle (90 px, on the
-    first line, now). So a long piece's title is cut about 50 px sooner in the contents ("I
-    wandered lonely as a…").
+    (0.66, in the UI's, now). The right column is as wide as its text, in the row's middle (90 px,
+    on the first line, now). So the titles in the contents are whole, with more room than now: "I
+    wandered lonely as a Cloud" has 432 px for its 363 (388 now).
   - `text-view.js` keeps its pure functions (`renderPart`, `partOf`, `partSections`, `topBlock`,
     `wordStarts` and the rest). Its `TextView` extends common's: its constructor as now, with
     `step: (h) => Math.max(40, h * 0.75)`, and "Put the book down" for Put back.

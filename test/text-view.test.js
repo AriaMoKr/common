@@ -1,9 +1,9 @@
 // The text view's shell (src/text-view.js) over a stand-in DOM (test/dom.js), and a subclass whose
 // book has two parts of 20 blocks, its pages two blocks each, that counts each call of the site's
 // methods: opening at the place and closing at it, the keys, a rest sharing the place, a size and
-// Back brought there first, a theme, a link aimed, the parts, the contents and its focus, the
-// headroom on a short screen, the TV's methods, and the CSS put in once and first. Each over a book
-// that answers at once (outside's) and one that answers later (vrlbry's).
+// Back brought there first, a theme, a change of width, a link aimed, the parts, the contents and
+// its focus, the headroom on a short screen, the TV's methods, and the CSS put in once and first.
+// Each over a book that answers at once (outside's) and one that answers later (vrlbry's).
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
@@ -25,6 +25,23 @@ function lay(p, scale) {
   const a = p.querySelector('a');
   if (a) a.box = { top: p.box.top + 40 * scale, height: 20 * scale };
 }
+
+/** The text 640 px wide, the observer's first sight of it left to the test: the observer's callback. */
+function observed(doc, view) {
+  const body = view.$('.tv-body');
+  body.box = { top: BODY, height: BLOCKS * BLOCK, width: 640 };
+  return doc.observed.find((o) => o.el === body).fn;
+}
+
+/** The text laid out again at another width (a phone turned, a window resized): each block `tall` times as high. */
+function reflow(view, width, tall) {
+  view.tall = tall;
+  view.$('.tv-body').box.width = width;
+  view.layOut();
+}
+
+/** The block at the toolbar's foot. */
+const topBlock = (view) => view.placeAt(view._top()).b;
 
 /** Runs what is waiting: promises, scroll events, the book's answers. */
 async function settle() {
@@ -117,6 +134,8 @@ class View extends TextView {
   word = 'part';
   /** While set, a part is built once it resolves (a fetch under way). */
   gate = null;
+  /** How many times as high the text is at the view's width as at 640 px (reflow). */
+  tall = 1;
 
   constructor({ book, contents = [], ...options }) {
     super(options);
@@ -134,8 +153,13 @@ class View extends TextView {
   /** The page lays its text out again at its size, as a browser does when --tv-scale changes. */
   _style() {
     super._style();
+    this.layOut();
+  }
+
+  /** The text laid out at its size and the view's width. */
+  layOut() {
     const scale = Number(this.el.style.getPropertyValue('--tv-scale'));
-    for (const p of this.$('.tv-body').children) lay(p, scale);
+    for (const p of this.$('.tv-body').children) lay(p, scale * this.tall);
   }
 
   bookOpen() { this.did('bookOpen'); return this.book.open; }
@@ -161,7 +185,7 @@ class View extends TextView {
         });
         p.append(a);
       }
-      lay(p, this.book.scale);
+      lay(p, this.book.scale * this.tall);
       body.append(p);
     }
     const shown = { title: this.book.title, subtitle: part === 1 ? 'Part the second' : '' };
@@ -475,6 +499,103 @@ for (const later of [false, true]) {
       assert.equal(view.el.scrollTop, at(13), 'the colours change, not the place');
     });
 
+    it('keeps its place through a change of width, the 3D book left where it is; a height alone changes nothing', async () => {
+      const { doc, view, book } = page({ later });
+      const resized = observed(doc, view);
+      await view.open();
+      resized(); // shown: the observer's first sight of it
+      view.el.scrollTop = at(9) + 50; // block 9 half under the toolbar
+      await settle();
+      mock.timers.tick(250);
+      await settle();
+      assert.deepEqual(book.at, { c: 0, b: 8 });
+      view.calls.length = 0;
+      // A phone turned: the text 375 px wide, each block 2.5 times as high, and the scroll where it
+      // was, which shows block 3 at the top.
+      reflow(view, 375, 2.5);
+      resized();
+      assert.equal(view.el.scrollTop, Math.round(BODY + 9 * BLOCK * 2.5 - BAR), 'block 9 at the toolbar\'s foot again');
+      assert.equal(topBlock(view), 9);
+      await settle();
+      mock.timers.tick(250);
+      await settle();
+      assert.deepEqual(view.calls, [], 'the view\'s own scroll: not reading, and the 3D book not asked to jump');
+      assert.deepEqual(book.at, { c: 0, b: 8 });
+      reflow(view, 640, 1); // and back
+      resized();
+      assert.equal(view.el.scrollTop, at(9));
+      await settle();
+      view.el.box.height = 360; // the height alone: the text as it was
+      resized();
+      await settle();
+      mock.timers.tick(250);
+      await settle();
+      assert.equal(view.el.scrollTop, at(9));
+      assert.deepEqual(view.calls, []);
+    });
+
+    it('takes the reader\'s place before the text reflows, as they scroll, not what the reflow brings to the top', async () => {
+      const { doc, view } = page({ later });
+      const resized = observed(doc, view);
+      await view.open();
+      resized();
+      view.calls.length = 0;
+      // The width changes before the reader's scrolling rests, and the observer sees it only after:
+      // their place is block 13, not block 4, shared last, nor block 5, at the top once reflowed.
+      view.el.scrollTop = at(13) + 30;
+      await settle();
+      reflow(view, 375, 2.5);
+      mock.timers.tick(250);
+      await settle();
+      assert.deepEqual(view.calls, [['jumpTo', { c: 0, b: 13 }, { inPlace: true }]], 'shared as it rests');
+      resized();
+      assert.equal(view.el.scrollTop, Math.round(BODY + 13 * BLOCK * 2.5 - BAR));
+      assert.equal(topBlock(view), 13);
+      await settle();
+      view.calls.length = 0;
+      // Wider, the text is shorter, and the browser brings the scroll within its end before the
+      // observer sees the width: not reading.
+      reflow(view, 640, 1);
+      view.el.scrollTop = view.el.scrollTop;
+      assert.equal(view.el.scrollTop, BODY + BLOCKS * BLOCK - VIEW, 'held within the end');
+      await settle();
+      resized();
+      assert.equal(view.el.scrollTop, at(13));
+      mock.timers.tick(250);
+      await settle();
+      assert.deepEqual(view.calls, []);
+    });
+
+    it('keeps its place when the toolbar wraps onto another row, the browser\'s scroll neither reading nor sliding it away', async () => {
+      const { doc, view, bar } = page({ later, short: true });
+      const resized = observed(doc, view);
+      await view.open();
+      resized();
+      view.el.scrollTop = at(9) + 40;
+      await settle();
+      view.el.scrollTop = at(9); // reading up: the toolbar back, block 9 at its foot
+      await settle();
+      mock.timers.tick(250);
+      await settle();
+      assert.equal(bar.classList.contains('tv-away'), false);
+      view.calls.length = 0;
+      // Narrower, the text as wide (its column at its widest) but the toolbar on two rows: the text
+      // begins 27 px lower, and the browser keeps it in sight (scroll anchoring) before the observers
+      // see the change.
+      bar.box.height = BAR + 27;
+      for (const p of view.$('.tv-body').children) p.box.top += 27;
+      view.el.scrollTop += 27;
+      await settle();
+      assert.equal(bar.classList.contains('tv-away'), false, 'not reading down');
+      doc.observed[0].fn(); // the toolbar's observer
+      assert.equal(view.el.scrollTop, at(9), 'block 9 at the foot of the taller toolbar');
+      assert.equal(topBlock(view), 9);
+      await settle();
+      mock.timers.tick(250);
+      await settle();
+      assert.deepEqual(view.calls, [], 'not reading: the 3D book not asked to jump');
+    });
+
     it('brings the book to the reader\'s place before Back and Put back; the slider jumps', async () => {
       const { view, book } = page({ later });
       book.trail = 1;
@@ -786,7 +907,8 @@ describe('TextView: a short screen', () => {
 
   it('keeps --tv-bar-h, what Tab scrolls to stops below, at the toolbar\'s height as it changes', async () => {
     const { doc, view, bar } = page();
-    assert.deepEqual(doc.observed.map((o) => o.el), [bar]);
+    assert.deepEqual(doc.observed.map((o) => o.el.className), ['tv-bar', 'tv-body'], 'and the text, whose width it keeps its place through');
+    assert.equal(doc.observed[0].el, bar);
     await view.open();
     assert.equal(view.el.style.getPropertyValue('--tv-bar-h'), `${BAR}px`);
     bar.box.height = 87; // two rows, at 320 px
