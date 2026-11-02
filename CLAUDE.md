@@ -134,7 +134,7 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   door walk, whose view `go()` hands on at the threshold, 0.8 m into the last leg. README, "Coming
   from a site's own copy", also has outside's water walks and bench guards since 0.7.1.
 - `src/panel.js`: vrlbry's `public/js/ui/panel.js` (`eb0dfab`) with outside's `canvas-panel.js`
-  (`fadc2e1`) and music's (`e665a2e`) where general. `Panel({ width, height, pxPerMeter = 1200, px,
+  (`fadc2e1`) and music's (`b906d13`) where general. `Panel({ width, height, pxPerMeter = 1200, px,
   background, radius, anisotropy, ring = 0, canvas })`: the canvas by `pxPerMeter` (at most 2048 a
   side, vrlbry's) or `px` wide (outside's); `ring` the outline's width round the row pointed at (0
   vrlbry's, 2 outside's, 4 music's on a TV). Elements `text`, `button`, `slider`, `list` (vrlbry's
@@ -147,7 +147,7 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   vrlbry kept 140 px; the label and `sub` have the rest.
 - `src/text-view.js`: vrlbry's `public/js/ui/text-view.js` (`eb0dfab`) without its book, with
   outside's (`fadc2e1`: the place again a frame after opening, each theme's `color-scheme`,
-  `turn(side)`, `scrollStep(dir)`) and music's (`e665a2e`: A− and A+ named "A− smaller text" and
+  `turn(side)`, `scrollStep(dir)`) and music's (`b906d13`: A− and A+ named "A− smaller text" and
   "A+ larger text"). `TEXT_VIEW_CSS` (the shell's rules; a `<style id="tv-view-style">` first in
   `<head>`, once a document; `.tv-body`'s rules stay in the sites) and `TextView<P>({ root, tv,
   step, returnFocus, onOpen, onClose })`. A place `P` is the site's, kept and handed back, never

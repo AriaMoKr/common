@@ -3,7 +3,7 @@
 // hit by the uv where a ray meets its plane (u, v from 0 to 1, from its bottom left), so one works
 // with a mouse, a finger, a gamepad's dot, a TV's remote and a VR controller. vrlbry's
 // public/js/ui/panel.js (AriaMoKr/vrlbry at eb0dfab), with what outside's copy (its canvas-panel.js
-// at fadc2e1) and music's (e665a2e) add: a ray over it allocates nothing, set redraws only on a
+// at fadc2e1) and music's (b906d13) add: a ray over it allocates nothing, set redraws only on a
 // change, a size by the canvas's width, an outline round the row pointed at, and elements of a
 // site's own. It is redrawn only when something on it changes, never per frame.
 import * as THREE from 'three';

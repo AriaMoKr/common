@@ -906,7 +906,7 @@ The types `Hit`, `Hand`, `How`, `KeyAction`, `PadPress`, `Walk` and `ControlsOpt
 Panels in the 3D view: a canvas that textures a plane, with text, buttons, sliders, lists that
 scroll, pictures, rectangles and elements a site draws itself. vrlbry's `public/js/ui/panel.js`
 (at `eb0dfab`), with what outside's copy (its `canvas-panel.js` at `fadc2e1`) and music's
-(`e665a2e`) add. A ray meets it at a uv (u and v from 0 to 1, from its bottom left), so one panel
+(`b906d13`) add. A ray meets it at a uv (u and v from 0 to 1, from its bottom left), so one panel
 works with a mouse, a finger, a gamepad's dot, a TV's remote and a VR controller: the site's
 `castRay` finds the uv, and the panel what is there. A ray over it allocates nothing, and it is
 drawn again only when something on it changes, never each frame.
@@ -967,7 +967,7 @@ The types `PanelOptions`, `PanelElement`, `ListItem`, `CustomElement` and the re
 
 The open book's text as a page on a screen, over the 3D view, for a screen reader, the keyboard,
 zoom and phones: vrlbry's `public/js/ui/text-view.js` (at `eb0dfab`) without its book, with what
-outside's copy (`fadc2e1`) and music's (`e665a2e`) add. The 3D book stays where the reader's place
+outside's copy (`fadc2e1`) and music's (`b906d13`) add. The 3D book stays where the reader's place
 is. The view opens there, keeps up with the book's pages as they turn, and closes leaving the book
 open at the place at the top of the view. Its header is the reader's toolbar: the parts before and
 after, Contents, the text size, the theme, where the reader is (a slider), Back and Put back. A

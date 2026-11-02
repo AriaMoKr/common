@@ -1,7 +1,7 @@
 // The text view's shell, for each site's own view to extend: on a screen, the open book's part as a
 // page of text over the 3D view, for screen readers, the keyboard, zoom and phones. vrlbry's
 // public/js/ui/text-view.js (AriaMoKr/vrlbry at eb0dfab) without its book, with what outside's copy
-// (fadc2e1) and music's (e665a2e) add. The 3D book stays the reading place: the view keeps the place
+// (fadc2e1) and music's (b906d13) add. The 3D book stays the reading place: the view keeps the place
 // shared with it, which is the site's own (vrlbry's { c, b }, outside's [s, b, w]) and which the view
 // hands back but never reads. Opening the view scrolls there, turning pages keeps it in step, and
 // closing it leaves the book open at the place at the top of the view. Its header is the reader's
