@@ -1,16 +1,53 @@
-// tools/chrome.mjs: the profile each Chrome starts on, checked without starting Chrome, and the tab's
-// DevTools messages over a stand-in WebSocket. With CHROME_TEST=1, a real Chrome too.
+// tools/chrome.mjs: the profile each Chrome starts on, checked without starting Chrome, a stand-in
+// Chrome (test/chrome.js) that is not the process spawned, and the tab's DevTools messages over a
+// stand-in WebSocket. With CHROME_TEST=1, a real Chrome too.
 
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { Page, findChrome, launchChrome, localState, newProfile } from '../tools/chrome.mjs';
+import { fileURLToPath } from 'node:url';
+import { Page, findChrome, launchChrome, localState, newProfile, sleep } from '../tools/chrome.mjs';
 import { serve } from '../tools/serve.mjs';
 
 const source = readFileSync(new URL('../tools/chrome.mjs', import.meta.url), 'utf8');
 const profiles = () => readdirSync(tmpdir()).filter((n) => n.startsWith('common-chrome-')).sort();
+
+const running = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Runs `test` with the stand-in Chrome as CHROME_PATH, given the switches that make it log, and what
+ * it has logged so far. Then the stand-ins still running exit, as their log's folder goes, and the
+ * profiles they started on go too, whatever launchChrome left.
+ */
+async function withStandIn(test) {
+  const dir = mkdtempSync(join(tmpdir(), 'common-stand-in-'));
+  const log = join(dir, 'log');
+  const logged = () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').map((line) => JSON.parse(line)) : []);
+  const was = process.env.CHROME_PATH;
+  process.env.CHROME_PATH = fileURLToPath(new URL('./chrome.js', import.meta.url));
+  try {
+    await test([`--stand-in-log=${log}`], logged);
+  } finally {
+    if (was === undefined) delete process.env.CHROME_PATH;
+    else process.env.CHROME_PATH = was;
+    const started = new Set(logged().map((e) => e.profile).filter(Boolean));
+    rmSync(dir, { recursive: true, force: true });
+    await sleep(200);
+    for (const p of started) rmSync(p, { recursive: true, force: true, maxRetries: 5 });
+  }
+}
+
+/** What each process logged, in order, as [as, event]. */
+const events = (logged) => logged.map((e) => [e.as, e.event]);
 
 describe('the profile each Chrome starts on', () => {
   it('tells Chrome the Windows password is not blank, as of now in microseconds since 1601', () => {
@@ -71,6 +108,19 @@ describe('the profile each Chrome starts on', () => {
     }
     assert.deepEqual(profiles(), before);
   });
+
+  it('is removed again when Chrome cannot even be spawned (a .cmd, which Windows starts only through a shell)', async () => {
+    const before = profiles();
+    const was = process.env.CHROME_PATH;
+    process.env.CHROME_PATH = join(tmpdir(), 'no-such-chrome', 'chrome.cmd');
+    try {
+      await assert.rejects(launchChrome(), /Chrome did not start .*no-such-chrome/);
+    } finally {
+      if (was === undefined) delete process.env.CHROME_PATH;
+      else process.env.CHROME_PATH = was;
+    }
+    assert.deepEqual(profiles(), before);
+  });
 });
 
 describe('findChrome', () => {
@@ -91,6 +141,56 @@ describe('findChrome', () => {
       if (was === undefined) delete process.env.CHROME_PATH;
       else process.env.CHROME_PATH = was;
     }
+  });
+});
+
+describe('a Chrome that is not the process spawned (the stand-in, test/chrome.js)', () => {
+  const windows = process.platform === 'win32'; // where the profile has its Local State
+  const closed = [['spawned', 'start'], ['browser', 'start'], ['browser', 'port'], ['browser', 'closed'], ['browser', 'exit']];
+
+  it('is held on to when it restarts itself, as Chrome with an update waiting, and close() ends it', async () => {
+    await withStandIn(async (args, logged) => {
+      const chrome = await launchChrome({ args: [...args, '--stand-in-restart'] });
+      const [spawned, browser, port] = logged();
+      assert.deepEqual(events([spawned, browser, port]), closed.slice(0, 3));
+      assert.equal(spawned.pid, chrome.process.pid);
+      assert.equal(chrome.process.exitCode, 0, 'the process spawned exited before the port came');
+      assert.equal(chrome.endpoint, `http://127.0.0.1:${port.port}`, "the browser's");
+      assert.equal(browser.profile, chrome.profile);
+      assert.equal(browser.localState, windows);
+      await chrome.close();
+      assert.deepEqual(events(logged()), closed, 'closed by Browser.close, its profile untouched while it ran');
+      assert.equal(logged().at(-1).localState, windows, 'Local State there until it exited');
+      assert.equal(running(browser.pid), false);
+      assert.equal(existsSync(chrome.profile), false, 'then the profile removed');
+    });
+  });
+
+  it('is closed by Browser.close when the process spawned only started it, and then that process', async () => {
+    await withStandIn(async (args, logged) => {
+      const chrome = await launchChrome({ args: [...args, '--stand-in-wrapper'] });
+      const [spawned, browser] = logged();
+      assert.equal(spawned.pid, chrome.process.pid);
+      assert.equal(chrome.process.exitCode, null, 'the process spawned still there');
+      await chrome.close();
+      assert.deepEqual(events(logged()), closed);
+      assert.equal(logged().at(-1).localState, windows);
+      assert.equal(running(browser.pid), false);
+      assert.notEqual(chrome.process.exitCode ?? chrome.process.signalCode, null, 'the process spawned ended after');
+      assert.equal(existsSync(chrome.profile), false);
+    });
+  });
+
+  it('gives up at the timeout, and a Chrome that opens its port after is closed before the profile goes', async () => {
+    await withStandIn(async (args, logged) => {
+      const late = launchChrome({ args: [...args, '--stand-in-restart', '--stand-in-port-after=1500'], timeout: 1000 });
+      await assert.rejects(late, /Chrome did not open its DevTools port in 1 s\.$/);
+      const browser = logged()[1];
+      assert.deepEqual(events(logged()), closed, 'closed by Browser.close, its profile untouched while it ran');
+      assert.equal(logged().at(-1).localState, windows);
+      assert.equal(running(browser.pid), false);
+      assert.equal(existsSync(browser.profile), false, 'the profile removed once it had exited');
+    });
   });
 });
 
@@ -159,7 +259,7 @@ describe('a tab (Page)', () => {
 });
 
 describe('a real Chrome', { skip: process.env.CHROME_TEST ? false : 'set CHROME_TEST=1 to start Chrome' }, () => {
-  it('opens a served page, keeps its Local State, and leaves no profile behind', async () => {
+  it('opens a served page, keeps its Local State, and leaves no Chrome or profile behind', async () => {
     const site = mkdtempSync(join(tmpdir(), 'common-site-'));
     writeFileSync(join(site, 'index.html'), '<!doctype html><title>common</title><p>here</p>');
     const server = await serve(site);
@@ -195,6 +295,7 @@ describe('a real Chrome', { skip: process.env.CHROME_TEST ? false : 'set CHROME_
       server.close();
       rmSync(site, { recursive: true, force: true });
     }
+    await assert.rejects(fetch(`${chrome.endpoint}/json/version`), TypeError, 'nothing listens on its port');
     assert.equal(existsSync(chrome.profile), false);
     assert.deepEqual(profiles(), before);
   });

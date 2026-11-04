@@ -26,24 +26,32 @@ export function newProfile({ platform, now }?: {
  * @typedef {object} Chrome
  * @property {string} endpoint its DevTools endpoint (http://127.0.0.1:<port>): /json/list and the
  *   rest, as a browser started with --remote-debugging-port has
- * @property {string} profile its profile's folder, removed by close()
- * @property {import('node:child_process').ChildProcess} process
+ * @property {string} profile its profile's folder, removed by close() once Chrome has let go of it
+ * @property {import('node:child_process').ChildProcess} process the process spawned, which may not
+ *   be the browser: a Chrome that restarted itself runs on in another
  * @property {() => Promise<Page>} newPage opens a tab at about:blank
- * @property {() => Promise<void>} close ends Chrome and removes its profile
+ * @property {() => Promise<void>} close ends Chrome by Browser.close, whichever process it is, then
+ *   the process spawned if it is still there, then removes the profile once Chrome has let go of it
  */
 /**
- * Starts Chrome on a new profile (newProfile), with its DevTools port open.
+ * Starts Chrome on a new profile (newProfile), with its DevTools port open. Chrome may restart
+ * itself, to start an update waiting: the port is read until `timeout`, from whichever process
+ * writes it. Then, if it hasn't come, the process spawned is ended, any Chrome that opens its port
+ * meanwhile is closed by Browser.close, and the profile is removed once no Chrome holds it, waiting
+ * up to 5 s; else the error says where it is left.
  * @param {object} [o]
  * @param {boolean} [o.headless] true (the default): no window; false: a visible window, for
  *   measuring performance on a desktop
  * @param {string[]} [o.args] more command-line switches (--window-size=1280,800, …)
  * @param {string} [o.url] what its first tab opens (about:blank)
+ * @param {number} [o.timeout] how long Chrome has to open its DevTools port, in ms (60000)
  * @returns {Promise<Chrome>}
  */
-export function launchChrome({ headless, args, url }?: {
+export function launchChrome({ headless, args, url, timeout }?: {
     headless?: boolean | undefined;
     args?: string[] | undefined;
     url?: string | undefined;
+    timeout?: number | undefined;
 }): Promise<Chrome>;
 /** @type {(ms: number) => Promise<void>} */
 export const sleep: (ms: number) => Promise<void>;
@@ -99,16 +107,21 @@ export type Chrome = {
      */
     endpoint: string;
     /**
-     * its profile's folder, removed by close()
+     * its profile's folder, removed by close() once Chrome has let go of it
      */
     profile: string;
+    /**
+     * the process spawned, which may not
+     * be the browser: a Chrome that restarted itself runs on in another
+     */
     process: import("node:child_process").ChildProcess;
     /**
      * opens a tab at about:blank
      */
     newPage: () => Promise<Page>;
     /**
-     * ends Chrome and removes its profile
+     * ends Chrome by Browser.close, whichever process it is, then
+     * the process spawned if it is still there, then removes the profile once Chrome has let go of it
      */
     close: () => Promise<void>;
 };

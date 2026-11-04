@@ -1070,7 +1070,7 @@ Each site installs it from GitHub at a tag:
 
 ```json
 "dependencies": {
-  "common": "github:AriaMoKr/common#v0.8.3",
+  "common": "github:AriaMoKr/common#v0.8.4",
   "three": "0.186.1"
 }
 ```
@@ -1090,7 +1090,9 @@ changes no other module. v0.8.1 changes only those two: a list's right column is
 text, and the text view keeps the reader's place through a change of width. v0.8.2 changes only
 the text view's `follow()`: the view stays at the reader's place while the 3D book's pages, shown
 again, still hold it. v0.8.3 changes only the text view's toolbar on a short screen: the view's own
-smooth scrolls leave it in sight.
+smooth scrolls leave it in sight. v0.8.4 changes only `tools/chrome.mjs`: `launchChrome` holds on to
+a Chrome that restarts itself, waiting up to its new `timeout`, and `close()` ends Chrome whichever
+process it is ([`tools/chrome.mjs`](#toolschromemjs)).
 
 `src/` goes together: `controls.js` imports `./gamepad.js` and `./tv.js` from beside it, so each
 way below copies or serves the whole folder, and a vendored copy works wherever it lands.
@@ -1174,7 +1176,9 @@ Chrome over the DevTools protocol, for the tools that need a real browser: headl
 and checks (breadboard's `check-browser.mjs` and `make-icons.mjs`, outside's `preview.mjs` and
 `hallway-view.mjs`, the hallway's `door-views.mjs`), or in a window for measuring performance on a
 desktop (vrlbry's and music's `quest-perf.mjs`). Needs Node 22 or later (its built-in WebSocket)
-and an installed Chrome, Edge or Chromium; `CHROME_PATH` chooses one.
+and an installed Chrome, Edge or Chromium; `CHROME_PATH` chooses one, or names a Node script
+(`.js`, `.mjs` or `.cjs`) standing in for one, which `launchChrome` runs on the Node running it
+(`test/chrome.js`).
 
 ```js
 import { Page, launchChrome } from 'common/tools/chrome.mjs';
@@ -1183,7 +1187,7 @@ const chrome = await launchChrome();                  // headless
 const page = await chrome.newPage();
 await page.goto('http://127.0.0.1:8088/');
 const title = await page.evaluate('document.title');
-await chrome.close();                                 // ends Chrome and removes its profile
+await chrome.close();                                 // ends Chrome and removes its profile (below)
 
 // A window, on the page to measure: its DevTools endpoint is what --cdp took.
 const shown = await launchChrome({ headless: false, url: 'http://localhost:8080/?perf' });
@@ -1193,7 +1197,7 @@ const perf = await Page.connect(tabs.find((t) => t.type === 'page').webSocketDeb
 
 | Export | |
 |---|---|
-| `launchChrome({ headless = true, args = [], url = 'about:blank' })` | Starts Chrome on a new profile (below) with its DevTools port open. Resolves to `{ endpoint, profile, process, newPage(), close() }`: `endpoint` is `http://127.0.0.1:<port>`, as a browser started with `--remote-debugging-port` has; `newPage()` opens a tab; `close()` ends Chrome and removes the profile. `args` are more switches (`--window-size=1280,800`); `url` is what the first tab opens. |
+| `launchChrome({ headless = true, args = [], url = 'about:blank', timeout = 60000 })` | Starts Chrome on a new profile (below) with its DevTools port open, from whichever process opens it within `timeout` ms. Resolves to `{ endpoint, profile, process, newPage(), close() }`: `endpoint` is `http://127.0.0.1:<port>`, as a browser started with `--remote-debugging-port` has; `process` is the process spawned, which may not be the browser (below); `newPage()` opens a tab; `close()` ends Chrome, whichever process it is, and removes the profile. `args` are more switches (`--window-size=1280,800`); `url` is what the first tab opens. |
 | `Page` | One tab: `Page.connect(webSocketDebuggerUrl)`, `send(method, params)`, `on(event, fn)`, `evaluate(expression)` (promises awaited, the page's error thrown), `goto(url, settleMs = 1500)`, `close()`. What is waiting fails when the tab closes, as a window closed by hand does. |
 | `findChrome()` | `CHROME_PATH`, else the first Chrome, Edge or Chromium installed. |
 | `newProfile({ platform?, now? })` | The profile each Chrome starts on: a new folder in the temp folder, with its `Local State` written first on Windows. |
@@ -1215,6 +1219,20 @@ Chrome starts:
 Chrome takes that answer and doesn't test; it tests again only if the password changes after that
 time. So start Chrome for a tool through `launchChrome`, not by hand on a new profile, and keep this
 step: `test/chrome.test.js` checks the file it writes without starting Chrome.
+
+Nor is the profile removed while a Chrome may be on it: to a Chrome still starting, it would be a
+new, empty profile, without that `Local State`, and the failed logon again. And the process
+`launchChrome` spawned may not stay the browser. With an update waiting, Chrome starts the new
+version on the same switches and profile and exits, and the new process opens the port (Chrome
+156.0.8078.74 to .80, on 2026-11-02). So `launchChrome` reads the profile's `DevToolsActivePort`
+until `timeout`, whatever the process it spawned does. `close()` ends the browser by `Browser.close`
+over its socket, whichever process it is, then the process spawned if it is still there, then
+removes the profile once Chrome has let go of it (its `lockfile` gone on Windows, its
+`SingletonLock` elsewhere). If the port doesn't come, `launchChrome` ends the process it spawned,
+closes by `Browser.close` any Chrome that opens its port meanwhile, and removes the profile once no
+Chrome holds it, waiting up to 5 s; else its error says where the profile is left.
+`test/chrome.test.js` checks this on a stand-in Chrome (`test/chrome.js`) that starts another and
+exits, as Chrome did.
 
 ### `tools/serve.mjs`
 
@@ -1333,14 +1351,14 @@ concurrency:
 
 jobs:
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.3
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.4
 ```
 
 Breadboard's job adds its build and folder:
 
 ```yaml
   pages:
-    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.3
+    uses: AriaMoKr/common/.github/workflows/pages.yml@v0.8.4
     with:
       build: npm run build
       path: dist

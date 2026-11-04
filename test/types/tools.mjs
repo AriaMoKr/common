@@ -22,7 +22,7 @@ try {
 }
 
 // quest-perf.mjs: a window on the page to measure, its tab connected by its DevTools endpoint.
-const shown = await launchChrome({ headless: false, url: 'http://localhost:8080/?perf' });
+const shown = await launchChrome({ headless: false, url: 'http://localhost:8080/?perf', timeout: 120000 });
 /** @type {{ type: string, webSocketDebuggerUrl: string }[]} */
 const tabs = await (await fetch(`${shown.endpoint}/json/list`)).json();
 const perf = await Page.connect(tabs.find((t) => t.type === 'page')?.webSocketDebuggerUrl ?? '');
@@ -45,6 +45,8 @@ const list = LIST;
 
 // @ts-expect-error a Chrome's switches are a list
 await launchChrome({ args: '--window-size=1280,800' });
+// @ts-expect-error a timeout is a number of milliseconds
+await launchChrome({ timeout: '60s' });
 // @ts-expect-error a tab waits a number of milliseconds
 await (await chrome.newPage()).goto('about:blank', '1s');
 // @ts-expect-error a port is a number

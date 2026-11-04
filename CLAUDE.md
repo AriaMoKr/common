@@ -28,7 +28,7 @@ agent, `window.hallwayTV`, Back and the page's history, and the checklist for a 
 what a site's `Controls` gives the walking controls, the panels' elements, what a site's
 `TextView` gives the text view, how each site loads the package, the tools (with why Chrome's profile gets its Local State) and the workflow's caller.
 
-The sites install it from GitHub at a tag (`github:AriaMoKr/common#v0.8.3`) and load it in three
+The sites install it from GitHub at a tag (`github:AriaMoKr/common#v0.8.4`) and load it in three
 ways: a vendor copy and an import map (hallway, outside: `tools/vendor.mjs`), `server/vendor.js`
 (vrlbry, music), and Vite (breadboard, TypeScript). Every site takes the modules of 0.1.0 to 0.4.0
 from here (vrlbry and music keep their own gamepad reader, on `stick` and the rest; breadboard has
@@ -183,9 +183,18 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   site's `tools/` checked by TypeScript (outside's `tsconfig.node.json`) needs no declarations of
   its own; outside's `types/node/common-tools.d.ts` goes when it takes 0.8.0.
 - `tools/chrome.mjs`: breadboard's `scripts/lib/chrome.mjs` (outside's `tools/lib/` is the same):
-  `findChrome`, `launchChrome({ headless, args, url })` (resolves to `{ endpoint, profile, process,
-  newPage, close }`), `Page` (rejects what is waiting when the tab closes), `newProfile` and
-  `localState` (the profile's Local State, written before Chrome starts), `sleep`.
+  `findChrome`, `launchChrome({ headless, args, url, timeout })` (resolves to `{ endpoint, profile,
+  process, newPage, close }`), `Page` (rejects what is waiting when the tab closes), `newProfile` and
+  `localState` (the profile's Local State, written before Chrome starts), `sleep`. Since 0.8.4 the
+  port is read from `DevToolsActivePort` (`activePort`: the port and the browser's socket path)
+  until `timeout` (60 s), whatever the process spawned does: Chrome with an update waiting starts
+  the new version and exits, and the new one writes it (2026-11-02). `close()` ends the browser by
+  `Browser.close` (`closeBrowser`: its pid from `SystemInfo.getProcessInfo`, waited for, killed 10 s
+  on), then the process spawned, then the profile once `held` says no Chrome holds it (`lockfile`
+  on Windows, `SingletonLock` elsewhere). Giving up, it ends the process spawned and `release`s the
+  profile (up to 5 s, closing a Chrome that opens its port meanwhile) before removing it, else
+  leaves it and says where; a spawn that throws (EFTYPE, a `.cmd`'s EINVAL) removes it too. A
+  `CHROME_PATH` ending in `.js`, `.mjs` or `.cjs` runs on this Node (`test/chrome.js`).
 - `tools/serve.mjs`: outside's dev server with the hallway's types. `serve(root, { port, host })`,
   `start(args, defaults)` (the command, over a site's port), `options`, `TYPES`; as a command
   `--root public --port 8080 --host localhost --name <package.json's>`, printing `<name>: http://…/`.
@@ -228,7 +237,11 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   one or two at a time (a refit: the place kept, but not another book's) and turned (the view's
   own turn to the new pages' first place, though they hold some of it), a link aimed, `placeAimed`, the parts, the contents and its focus, another book, parts built in turn,
   the headroom (the view's own smooth scrolls leaving the toolbar shown, the reader's sliding it), the TV's methods, the CSS put in once and first), `chrome.test.js` (the profile's Local State checked without
-  starting Chrome, `Page` over a stand-in WebSocket; a real Chrome with `CHROME_TEST=1`),
+  starting Chrome, and removed when Chrome cannot start or be spawned; `test/chrome.js`, a stand-in
+  Chrome by `CHROME_PATH`, not a test file itself, logging what it sees: one that restarts itself,
+  one behind a wrapper that stays, one whose port comes after the timeout, each closed by
+  `Browser.close` with its profile untouched until it has exited; `Page` over a stand-in WebSocket;
+  a real Chrome with `CHROME_TEST=1`),
   `serve.test.js` (a temporary site on a free port, and the command), `vendor.test.js` (a temporary
   site: files, folders by extension, optional and required entries, the list's checks, the skip
   under `node_modules`, and this package's own `src/` alone), `package.test.js` (exports, `files`,
@@ -285,9 +298,13 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   password is blank by logging on with an empty one, and ten failed logons in ten minutes lock the
   account. Every Chrome a tool starts goes through `launchChrome`, whose `newProfile` writes the
   profile's Local State first (`os_password_blank: false`, `os_password_last_changed` now in
-  microseconds since 1601). Keep that step; `test/chrome.test.js` checks it. Before running
-  anything new that starts Chrome, read the bad-password count (`NetUserGetInfo` level 2,
-  `usri2_bad_pw_count`) and compare it after.
+  microseconds since 1601). Keep that step; `test/chrome.test.js` checks it. Nor is a profile
+  removed while a Chrome holds it or may still be starting on it: to that Chrome it is a new, empty
+  profile, and the failed logon again (Chrome restarts itself for an update, so since 0.8.4 the
+  port is awaited from whichever process, and `close()` ends Chrome by `Browser.close`). Before
+  running anything new that starts Chrome, read the bad-password count (`NetUserGetInfo` level 2,
+  `usri2_bad_pw_count`) and compare it after. Other sessions' tools start Chromes on profiles in
+  the same temp folder: never remove a `common-chrome-*` profile a run of yours didn't make.
 - **The vendor copy runs where npm puts it.** As a site's postinstall it runs from the site's root.
   A package installed under another's `node_modules` (layersharedsession) has no
   `node_modules/common` of its own there, so it calls `run()` from a guarded script of its own
