@@ -29,23 +29,25 @@ what a site's `Controls` gives the walking controls, the panels' elements, what 
 `TextView` gives the text view, how each site loads the package, the tools (with why Chrome's profile gets its Local State) and the workflow's caller.
 
 The sites install it from GitHub at a tag (`github:AriaMoKr/common#v0.8.4`) and load it in three
-ways: a vendor copy and an import map (hallway, outside: `tools/vendor.mjs`), `server/vendor.js`
-(vrlbry, music), and Vite (breadboard, TypeScript). Every site takes the modules of 0.1.0 to 0.4.0
-from here (vrlbry and music keep their own gamepad reader, on `stick` and the rest; breadboard has
-no sky). Until each switches over in its own change, each keeps its own copies of what 0.5.0
-brings: `back-history.js` (vrlbry, music, outside), `chrome.mjs` (breadboard `scripts/lib/`,
-outside `tools/lib/`), `tools/serve.mjs` and `tools/vendor.mjs` (hallway, outside,
-layersharedsession) and its own `pages.yml`. Only the hallway has a TV view, with its own
-`public/js/tv.js` (whose `roomFromInput` stays there: it needs layersharedsession's `isRoom`); the
-others take 0.6.0's in a change of their own. Three copies of one `controls.js` walk the visitor
-(the hallway's, outside's and the template's, AriaMoKr/RoomTemplateEmpty, which art and video
-take by merge); each moves to 0.7.0's `Controls` in a message of its own, the template and the
-hallway first, keeping only its room's: what a ray meets, where one may walk, what can be used.
-vrlbry's text view and 3D panel have two more copies each (music's by merge; outside's, cut down
-on 2026-10-24, and its `canvas-panel.js`); each moves to 0.8.0's `TextView` and `Panel` in a change
-of its own, vrlbry and outside first, then music by merge, keeping only its book's: its places, its
-parts and how they are built, what its toolbar does. README, "Coming from a site's own copy", says
-what changes for each.
+ways: a vendor copy and an import map (hallway, outside and the template's rooms:
+`tools/vendor.mjs`), `server/vendor.js` (vrlbry, music), and Vite (breadboard, TypeScript). Every
+site takes the modules of 0.1.0 to 0.4.0 from here (vrlbry and music keep their own gamepad reader,
+on `stick` and the rest; breadboard has no sky), and each has since switched over to what 0.5.0 to
+0.7.0 brought, in a change of its own (each site's main, as of 2026-11-04). Of 0.5.0's,
+`back-history.js` is common's in vrlbry, music and outside, and `tools/chrome.mjs` in every site
+with Chrome tools (breadboard's `scripts/lib/` and outside's `tools/lib/` copies are gone); a
+site's `tools/serve.mjs` is a few lines over common's on its port, and layersharedsession's
+`tools/vendor.mjs` its guarded `run()`; every site's `pages.yml` calls common's but vrlbry's and
+music's, whose own jobs build their pages and indexes. Every site's TV mode is 0.6.0's `tv.js`:
+the hallway's `public/js/tv.js` keeps only `roomFromInput`, for its Join form (it needs
+layersharedsession's `isRoom`). The hallway's, outside's and the template's
+(AriaMoKr/RoomTemplateEmpty) `controls.js` extend 0.7.0's `Controls`, keeping only their room's:
+what a ray meets, where one may walk, what can be used; so do the rooms made from the template
+(art, video, arcade, blocks, instruments). Of 0.8.0's, vrlbry's and outside's text views extend
+`TextView`, keeping only their book's (its places, its parts and how they are built, what its
+toolbar does), and their 3D panels are `Panel` (vrlbry's `ui/panel.js` and outside's
+`canvas-panel.js` are gone); music keeps its copies of vrlbry's until it takes them by merge.
+README, "Coming from a site's own copy", says what changed for each.
 
 No GitHub Pages: nothing here is a site. `.github/workflows/pages.yml` is only for callers (`on:
 workflow_call` and nothing else; `test/package.test.js` checks it): the sites' own workflows call
@@ -181,7 +183,7 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
 - `tools/*.d.mts`: likewise, by `tsconfig.tools.json` (strict, `types: ["node"]`, lib ES2022 without
   the DOM: Node's `fetch` gives `json()` as `unknown`, so a cast where a tool reads one), so a
   site's `tools/` checked by TypeScript (outside's `tsconfig.node.json`) needs no declarations of
-  its own; outside's `types/node/common-tools.d.ts` goes when it takes 0.8.0.
+  its own (outside's `types/node/common-tools.d.ts` went when it took 0.8.0).
 - `tools/chrome.mjs`: breadboard's `scripts/lib/chrome.mjs` (outside's `tools/lib/` is the same):
   `findChrome`, `launchChrome({ headless, args, url, timeout })` (resolves to `{ endpoint, profile,
   process, newPage, close }`), `Page` (rejects what is waiting when the tab closes), `newProfile` and
@@ -237,7 +239,9 @@ CHROME_TEST=1 npm test   # and start a real Chrome through launchChrome (read th
   one or two at a time (a refit: the place kept, but not another book's) and turned (the view's
   own turn to the new pages' first place, though they hold some of it), a link aimed, `placeAimed`, the parts, the contents and its focus, another book, parts built in turn,
   the headroom (the view's own smooth scrolls leaving the toolbar shown, the reader's sliding it), the TV's methods, the CSS put in once and first), `chrome.test.js` (the profile's Local State checked without
-  starting Chrome, and removed when Chrome cannot start or be spawned; `test/chrome.js`, a stand-in
+  starting Chrome, and removed when Chrome cannot start or be spawned, counted in a temp folder of
+  the test's own, as the real Chrome's leftovers are (`inOwnTemp`: other sessions' profiles come and
+  go in the shared one); `test/chrome.js`, a stand-in
   Chrome by `CHROME_PATH`, not a test file itself, logging what it sees: one that restarts itself,
   one behind a wrapper that stays, one whose port comes after the timeout, each closed by
   `Browser.close` with its profile untouched until it has exited; `Page` over a stand-in WebSocket;

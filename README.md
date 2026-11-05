@@ -45,9 +45,11 @@ that publishes them:
 - **[`.github/workflows/pages.yml`](.github/workflows/pages.yml)**: the sites' GitHub Pages
   workflow, for each site's own to call.
 
-Every site takes what v0.1.0 to v0.4.0 brought from here (breadboard has no sky). The modules,
-tools and workflow of v0.5.0, the TV module of v0.6.0, the walking controls of v0.7.0 and the
-panels and text view of v0.8.0 come to each site in a change of its own (see
+Every site takes what v0.1.0 to v0.4.0 brought from here (breadboard has no sky). Since then, each
+in a change of its own, the sites have taken v0.5.0's Back, tools and workflow in place of their
+own copies (vrlbry and music keep their own Pages jobs), every site the TV module of v0.6.0, and
+the hallway, outside and the template's rooms the walking controls of v0.7.0. vrlbry and outside
+have the panels and text view of v0.8.0; music takes them next (see
 [Coming from a site's own copy](#coming-from-a-sites-own-copy)).
 [The TV app](#the-tv-app) says what a site in the TV app does.
 
@@ -1414,8 +1416,8 @@ Every site took `door.js` and `nav.js` at v0.1.0, the portal, the fade and the g
   doorway's `uTime` is held. A `Vignette` beside the `Fade`, driven from `move.ts`'s walking and
   turning; the rig takes `eyeLift` in VR.
 
-**The Back, the tools and the workflow (v0.5.0).** Each site's copies of these are alike already;
-what changes for each when it takes common's in their place:
+**The Back, the tools and the workflow (v0.5.0).** Each site's copies of these were alike already;
+what changed for each when it took common's in their place:
 
 - **hallway**:
   - *serve*: `tools/serve.mjs` becomes the two lines above, on port 8088.
@@ -1455,8 +1457,8 @@ what changes for each when it takes common's in their place:
   - *Node 24*: their own `pages.yml` stays (it builds the pages and the indexes), with
     `node-version: 24`.
 
-**The TV app (v0.6.0 to v0.6.2).** Only the hallway has a TV view so far. The others take the module
-and [the checklist](#a-site-in-the-app) in a change of their own:
+**The TV app (v0.6.0 to v0.6.2).** Only the hallway had a TV view. The others took the module and
+[the checklist](#a-site-in-the-app) in a change of their own:
 
 - **hallway** (`public/js/tv.js`): it keeps `roomFromInput`, for its Join form, and takes `isTV`,
   `focusStops`, `nextStop` and `Remote` from common's. `main.js`'s `tv` becomes `tvMode()`, and
@@ -1471,10 +1473,11 @@ and [the checklist](#a-site-in-the-app) in a change of their own:
   (v0.6.2). vrlbry's Menu passes over its
   search box without one, and its search and ZIM address boxes keep the keyboard down until OK.
 
-**The walking controls (v0.7.0).** Three copies of one `controls.js` walk visitors about the sites:
-the template's (which art and video take by merge), the hallway's and outside's. Each becomes a
-subclass of common's `Controls` ([`controls.js`](#controlsjs)) and keeps only its own, each in a
-change of its own: the template and the hallway first, then art, video and outside.
+**The walking controls (v0.7.0).** Three copies of one `controls.js` walked visitors about the
+sites: the template's (which art and video took by merge), the hallway's and outside's. Each became
+a subclass of common's `Controls` ([`controls.js`](#controlsjs)) and kept only its own, each in a
+change of its own: the template and the hallway first, then art, video and outside. The other
+rooms made from the template (arcade, blocks, instruments) extend common's `Controls` too.
 
 - **The template** (`public/js/controls.js` at `f3e1c91`; art's is the same): it becomes the
   subclass above. It keeps these:
@@ -1577,10 +1580,11 @@ change of its own: the template and the hallway first, then art, video and outsi
   - `aimMiddle` while reading is for `main.js` to clear.
   - With less motion, the jump is common's: to the walk's end, walled in there.
 
-**The text view and the 3D panel (v0.8.0).** vrlbry's view and panel have two more copies each:
+**The text view and the 3D panel (v0.8.0).** vrlbry's view and panel had two more copies each:
 music's, by merge, and outside's, copied and cut down. Each site's view becomes a subclass of
 common's `TextView` ([`text-view.js`](#text-viewjs)), and its panels common's `Panel`
-([`panel.js`](#paneljs)), in a change of its own: vrlbry and outside next, then music by merge.
+([`panel.js`](#paneljs)), in a change of its own: vrlbry's and outside's have, and music's come
+next, by merge.
 Both were tried in copies (vrlbry at `eb0dfab`, outside at `fadc2e1`) as below. Their tests pass,
 and each view opens and closes at its place, keeps it through a size and a theme, and works with
 `?tv=emulate`. Their panels work by pointer and, with `?xr=emulate`, by a controller.

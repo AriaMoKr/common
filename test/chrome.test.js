@@ -12,7 +12,30 @@ import { Page, findChrome, launchChrome, localState, newProfile, sleep } from '.
 import { serve } from '../tools/serve.mjs';
 
 const source = readFileSync(new URL('../tools/chrome.mjs', import.meta.url), 'utf8');
+/** The profiles in the temp folder: inside `inOwnTemp`, only those of the test it runs. */
 const profiles = () => readdirSync(tmpdir()).filter((n) => n.startsWith('common-chrome-')).sort();
+
+/**
+ * Runs `test` with a temp folder of its own as TEMP, TMP and TMPDIR (which tmpdir() reads each time
+ * it is called), so the profiles it lists are only its own: other sessions' tools start and end
+ * Chromes on profiles in the shared one at any time. The folder goes after, unless a profile is
+ * left in it: that is the test's failure, and a Chrome may hold it still.
+ */
+async function inOwnTemp(test) {
+  const own = mkdtempSync(join(tmpdir(), 'common-temp-'));
+  const was = Object.fromEntries(['TEMP', 'TMP', 'TMPDIR'].map((name) => [name, process.env[name]]));
+  for (const name in was) process.env[name] = own;
+  try {
+    assert.equal(tmpdir(), own, 'new profiles are made in it');
+    await test();
+  } finally {
+    for (const [name, value] of Object.entries(was)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    if (!readdirSync(own).some((n) => n.startsWith('common-chrome-'))) rmSync(own, { recursive: true, force: true, maxRetries: 5 });
+  }
+}
 
 const running = (pid) => {
   try {
@@ -96,31 +119,22 @@ describe('the profile each Chrome starts on', () => {
     assert.match(body, /'--remote-debugging-port=0'/);
   });
 
-  it('is removed again when Chrome cannot start', async () => {
-    const before = profiles();
+  /** launchChrome with CHROME_PATH a `name` that isn't there, in a temp folder of its own. */
+  const cannotStart = (name) => inOwnTemp(async () => {
     const was = process.env.CHROME_PATH;
-    process.env.CHROME_PATH = join(tmpdir(), 'no-such-chrome', 'chrome.exe');
+    process.env.CHROME_PATH = join(tmpdir(), 'no-such-chrome', name);
     try {
       await assert.rejects(launchChrome(), /Chrome did not start .*no-such-chrome/);
     } finally {
       if (was === undefined) delete process.env.CHROME_PATH;
       else process.env.CHROME_PATH = was;
     }
-    assert.deepEqual(profiles(), before);
+    assert.deepEqual(profiles(), [], 'the profile it made removed');
   });
 
-  it('is removed again when Chrome cannot even be spawned (a .cmd, which Windows starts only through a shell)', async () => {
-    const before = profiles();
-    const was = process.env.CHROME_PATH;
-    process.env.CHROME_PATH = join(tmpdir(), 'no-such-chrome', 'chrome.cmd');
-    try {
-      await assert.rejects(launchChrome(), /Chrome did not start .*no-such-chrome/);
-    } finally {
-      if (was === undefined) delete process.env.CHROME_PATH;
-      else process.env.CHROME_PATH = was;
-    }
-    assert.deepEqual(profiles(), before);
-  });
+  it('is removed again when Chrome cannot start', () => cannotStart('chrome.exe'));
+
+  it('is removed again when Chrome cannot even be spawned (a .cmd, which Windows starts only through a shell)', () => cannotStart('chrome.cmd'));
 });
 
 describe('findChrome', () => {
@@ -259,12 +273,11 @@ describe('a tab (Page)', () => {
 });
 
 describe('a real Chrome', { skip: process.env.CHROME_TEST ? false : 'set CHROME_TEST=1 to start Chrome' }, () => {
-  it('opens a served page, keeps its Local State, and leaves no Chrome or profile behind', async () => {
+  it('opens a served page, keeps its Local State, and leaves no Chrome or profile behind', () => inOwnTemp(async () => {
     const site = mkdtempSync(join(tmpdir(), 'common-site-'));
     writeFileSync(join(site, 'index.html'), '<!doctype html><title>common</title><p>here</p>');
     const server = await serve(site);
     const url = `http://127.0.0.1:${server.address().port}/`;
-    const before = profiles();
     const chrome = await launchChrome({ url });
     try {
       if (process.platform === 'win32') {
@@ -297,6 +310,6 @@ describe('a real Chrome', { skip: process.env.CHROME_TEST ? false : 'set CHROME_
     }
     await assert.rejects(fetch(`${chrome.endpoint}/json/version`), TypeError, 'nothing listens on its port');
     assert.equal(existsSync(chrome.profile), false);
-    assert.deepEqual(profiles(), before);
-  });
+    assert.deepEqual(profiles(), [], 'nor another');
+  }));
 });
